@@ -1,0 +1,104 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Chrome QA Launcher</title>
+    <link rel="stylesheet" href="popup.css" />
+    <script src="popup.js" defer></script>
+  </head>
+  <body>
+    <main>
+      <header>
+        <p class="eyebrow">AUTHORIZED QA</p>
+        <h1>Isolated Chrome sessions</h1>
+        <p class="intro">
+          Open separate Chrome processes with explicit IPRoyal and display settings.
+        </p>
+      </header>
+
+      <form id="launcher-form">
+        <label>
+          <span>Target URL</span>
+          <input
+            id="target-url"
+            name="targetUrl"
+            type="url"
+            value="https://example.com"
+            placeholder="https://staging.example.com"
+            required
+          />
+        </label>
+
+        <label class="count-field">
+          <span>Session count</span>
+          <input
+            id="session-count"
+            name="count"
+            type="number"
+            min="1"
+            max="20"
+            value="3"
+            required
+          />
+        </label>
+
+        <label>
+          <span>Test environments</span>
+          <small>One per session: width×height | locale | timezone</small>
+          <textarea id="environments" rows="4" spellcheck="false" required>1366x768 | en-US | America/New_York
+1440x900 | en-GB | Europe/London
+1536x864 | en-SG | Asia/Singapore</textarea>
+          <button id="generate-environments" class="text-button" type="button">
+            Generate rows for session count
+          </button>
+        </label>
+
+        <label id="proxy-field">
+          <span>IPRoyal proxies</span>
+          <small>One unique sticky proxy per session. Credentials are not saved.</small>
+          <textarea
+            id="proxies"
+            rows="5"
+            spellcheck="false"
+            autocomplete="off"
+            placeholder="geo.iproyal.com:12321:username:password_session-TestA1&#10;geo.iproyal.com:12321:username:password_session-TestB2"
+            required
+          ></textarea>
+        </label>
+
+        <label class="authorization dry-run">
+          <input id="direct-mode" type="checkbox" />
+          <span>
+            <strong>Direct-connection dry run</strong><br />
+            Test launching and isolation without proxies. Every session will share
+            this computer’s normal public IP.
+          </span>
+        </label>
+
+        <label class="authorization">
+          <input id="authorized" type="checkbox" required />
+          <span>
+            I own this target or have written permission to test it, and I will not
+            use these sessions to bypass account or platform restrictions.
+          </span>
+        </label>
+
+        <div class="actions">
+          <button class="primary" type="submit">Launch sessions</button>
+          <button id="stop-all" class="secondary" type="button">Stop all</button>
+        </div>
+      </form>
+
+      <section id="status-card" class="status idle" aria-live="polite">
+        <span class="status-dot" aria-hidden="true"></span>
+        <p id="status-text">Ready to launch authorized test sessions.</p>
+      </section>
+
+      <p class="footnote">
+        Separate proxy configurations do not guarantee unique exit IPs. Verify them
+        only through an endpoint you are authorized to test.
+      </p>
+    </main>
+  </body>
+</html>
