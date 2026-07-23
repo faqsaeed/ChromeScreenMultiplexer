@@ -1,0 +1,16 @@
+{
+  "name": "authorized-chrome-qa-native-host",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Native companion for the Authorized Chrome QA Launcher extension.",
+  "scripts": {
+    "test": "node --test lib.test.mjs"
+  },
+  "dependencies": {
+    "playwright-core": "^1.61.0"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}
