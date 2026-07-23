@@ -1,4 +1,4 @@
-# Authorized Chrome QA Launcher
+# ChromeScreenMultiplexer
 
 This project launches separate, visible Chrome processes for authorized browser
 compatibility and regional QA. Each process receives:
