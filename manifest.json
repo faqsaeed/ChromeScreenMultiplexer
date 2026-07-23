@@ -1,0 +1,18 @@
+{
+  "manifest_version": 3,
+  "name": "Authorized Chrome QA Launcher",
+  "description": "Launch isolated Chrome test sessions with explicit proxy and display configurations.",
+  "version": "0.1.0",
+  "minimum_chrome_version": "105",
+  "permissions": [
+    "nativeMessaging",
+    "storage"
+  ],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "action": {
+    "default_title": "Chrome QA Launcher",
+    "default_popup": "popup.html"
+  }
+}
