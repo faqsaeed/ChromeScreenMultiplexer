@@ -8,7 +8,7 @@ import { chromium } from "playwright-core";
 import { validateLaunchPayload } from "./lib.mjs";
 
 const PROFILE_ROOT = path.join(os.tmpdir(), "authorized-chrome-qa-launcher");
-const MAX_ACTIVE_SESSIONS = 8;
+const MAX_ACTIVE_SESSIONS = 20;
 const sessions = new Map();
 
 let inputBuffer = Buffer.alloc(0);

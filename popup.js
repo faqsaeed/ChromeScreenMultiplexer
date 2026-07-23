@@ -112,8 +112,8 @@ form.addEventListener("submit", async (event) => {
     }
 
     const count = Number(countInput.value);
-    if (!Number.isInteger(count) || count < 1 || count > 20) {
-      throw new Error("Session count must be between 1 and 20.");
+    if (!Number.isInteger(count) || count < 1 || count > 100) {
+      throw new Error("Session count must be between 1 and 100.");
     }
 
     const environments = parseEnvironments(environmentsInput.value);
@@ -174,10 +174,21 @@ form.addEventListener("submit", async (event) => {
 generateEnvironmentsButton.addEventListener("click", () => {
   const count = Math.max(
     1,
-    Math.min(20, Number.parseInt(countInput.value, 10) || 1),
+    Math.min(100, Number.parseInt(countInput.value, 10) || 1),
   );
   countInput.value = String(count);
-  environmentsInput.value = ENVIRONMENT_PRESETS.slice(0, count).join("\n");
+  
+  const generated = [];
+  for (let i = 0; i < count; i++) {
+    if (i < ENVIRONMENT_PRESETS.length) {
+      generated.push(ENVIRONMENT_PRESETS[i]);
+    } else {
+      const width = 1000 + i * 10;
+      const height = 700 + i * 5;
+      generated.push(`${width}x${height} | en-US | America/New_York`);
+    }
+  }
+  environmentsInput.value = generated.join("\n");
 });
 
 directModeInput.addEventListener("change", syncDirectMode);

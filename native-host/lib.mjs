@@ -1,4 +1,4 @@
-const MAX_SESSIONS = 20;
+const MAX_SESSIONS = 100;
 const MIN_WIDTH = 320;
 const MAX_WIDTH = 3840;
 const MIN_HEIGHT = 400;

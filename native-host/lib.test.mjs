@@ -62,15 +62,15 @@ test("validates a complete authorized launch matrix", () => {
   assert.equal(result.targetUrl, "https://staging.example.com/");
 });
 
-test("accepts a matrix of 20 queued test configurations", () => {
-  const environments = Array.from({ length: 20 }, (_, index) => ({
+test("accepts a matrix of 100 queued test configurations", () => {
+  const environments = Array.from({ length: 100 }, (_, index) => ({
     width: 1000 + index * 10,
     height: 700 + index * 5,
     locale: "en-US",
     timezoneId: "America/New_York",
   }));
   const proxyLines = Array.from(
-    { length: 20 },
+    { length: 100 },
     (_, index) =>
       `geo.iproyal.com:12321:user:pass_session-Queue${index + 1}`,
   );
@@ -78,12 +78,12 @@ test("accepts a matrix of 20 queued test configurations", () => {
   const result = validateLaunchPayload({
     authorized: true,
     targetUrl: "https://staging.example.com",
-    count: 20,
+    count: 100,
     environments,
     proxyLines,
   });
 
-  assert.equal(result.count, 20);
+  assert.equal(result.count, 100);
 });
 
 test("accepts a direct-connection dry run without proxy rows", () => {
@@ -135,17 +135,17 @@ test("rejects proxy rows in direct-connection dry-run mode", () => {
   );
 });
 
-test("rejects more than 20 test configurations", () => {
+test("rejects more than 100 test configurations", () => {
   assert.throws(
     () =>
       validateLaunchPayload({
         authorized: true,
         targetUrl: "https://staging.example.com",
-        count: 21,
+        count: 101,
         environments: [],
         proxyLines: [],
       }),
-    /between 1 and 20/,
+    /between 1 and 100/,
   );
 });
 
