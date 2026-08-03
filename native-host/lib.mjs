@@ -1,8 +1,21 @@
+import { defaultCountryPool, isKnownCountry } from "./countries.js";
+
 const MAX_SESSIONS = 100;
 const MIN_WIDTH = 320;
 const MAX_WIDTH = 3840;
 const MIN_HEIGHT = 400;
 const MAX_HEIGHT = 2160;
+
+export const MAX_ACTIVE_SESSIONS = 20;
+export const DASHBOARD_CORNERS = [
+  "top-left",
+  "top-right",
+  "bottom-left",
+  "bottom-right",
+];
+const MIN_REFRESH_MS = 1000;
+const MAX_REFRESH_MS = 30_000;
+const SUPPORTED_VPN_PROVIDERS = ["surfshark"];
 
 function assert(condition, message) {
   if (!condition) {
@@ -88,6 +101,101 @@ function validateEnvironment(environment, index) {
   return { width, height, locale, timezoneId };
 }
 
+/**
+ * The country pool only has to cover the sessions that can be open at the same
+ * time: a country is released when its session closes and the next queued
+ * session reuses it. A pool at least as large as the whole run additionally
+ * gives every session in that run a country nothing else used.
+ */
+export function requiredCountryCount(sessionCount) {
+  return Math.min(sessionCount, MAX_ACTIVE_SESSIONS);
+}
+
+export function validateVpnConfig(vpn, count, directMode) {
+  if (!vpn || vpn.enabled !== true) {
+    return null;
+  }
+
+  assert(
+    directMode === true,
+    "VPN mode routes traffic through the Surfshark extension, so it cannot be combined with IPRoyal proxy rows. Enable the direct-connection option.",
+  );
+
+  const provider = String(vpn.provider || "surfshark").toLowerCase();
+  assert(
+    SUPPORTED_VPN_PROVIDERS.includes(provider),
+    `Unsupported VPN provider "${provider}".`,
+  );
+
+  const extensionPath = String(vpn.extensionPath || "").trim();
+  assert(
+    extensionPath,
+    "VPN mode needs the path to the unpacked Surfshark extension directory.",
+  );
+
+  const username = String(vpn.username || "").trim();
+  const password = String(vpn.password || "");
+  assert(
+    username && password,
+    "VPN mode needs the Surfshark account email and password.",
+  );
+
+  const needed = requiredCountryCount(count);
+  const requested = Array.isArray(vpn.countries) ? vpn.countries : [];
+  const countries = (
+    requested.length > 0 ? requested : defaultCountryPool(needed)
+  ).map((code) => String(code || "").trim().toUpperCase());
+
+  assert(countries.length > 0, "Select at least one VPN country.");
+  countries.forEach((code) => {
+    assert(
+      isKnownCountry(code),
+      `"${code}" is not in the Surfshark country catalogue.`,
+    );
+  });
+  assert(
+    new Set(countries).size === countries.length,
+    "The VPN country list contains a duplicate country.",
+  );
+  assert(
+    countries.length >= needed,
+    `Select at least ${needed} VPN countries so every simultaneously open Chrome profile gets a different one. ${countries.length} selected.`,
+  );
+
+  return {
+    enabled: true,
+    provider,
+    extensionPath,
+    username,
+    password,
+    countries,
+    verifyGeo: vpn.verifyGeo !== false,
+    connectTimeoutMs: 120_000,
+  };
+}
+
+export function validateDashboardConfig(dashboard) {
+  if (!dashboard || dashboard.enabled !== true) {
+    return { enabled: false, corner: "bottom-right", refreshMs: 4000 };
+  }
+
+  const corner = String(dashboard.corner || "bottom-right");
+  assert(
+    DASHBOARD_CORNERS.includes(corner),
+    `Dashboard corner must be one of: ${DASHBOARD_CORNERS.join(", ")}.`,
+  );
+
+  const refreshMs = Number(dashboard.refreshMs ?? 4000);
+  assert(
+    Number.isFinite(refreshMs) &&
+      refreshMs >= MIN_REFRESH_MS &&
+      refreshMs <= MAX_REFRESH_MS,
+    `Dashboard refresh must be ${MIN_REFRESH_MS}-${MAX_REFRESH_MS} ms.`,
+  );
+
+  return { enabled: true, corner, refreshMs: Math.round(refreshMs) };
+}
+
 export function validateLaunchPayload(payload) {
   assert(payload && typeof payload === "object", "Launch configuration is missing.");
   assert(
@@ -155,11 +263,16 @@ export function validateLaunchPayload(payload) {
     );
   }
 
+  const vpn = validateVpnConfig(payload.vpn, count, directMode);
+  const dashboard = validateDashboardConfig(payload.dashboard);
+
   return {
     targetUrl: target.href,
     count,
     environments,
     proxies,
     directMode,
+    vpn,
+    dashboard,
   };
 }

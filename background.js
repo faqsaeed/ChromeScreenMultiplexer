@@ -1,6 +1,7 @@
 const NATIVE_HOST_NAME = "com.local.chrome_qa_launcher";
 
 let nativePort = null;
+let lastFleet = null;
 let lastStatus = {
   kind: "idle",
   message: "Ready to launch authorized test sessions.",
@@ -18,6 +19,21 @@ async function publishStatus(status) {
     .catch(() => {});
 }
 
+async function publishFleet(snapshot) {
+  lastFleet = snapshot;
+  await chrome.storage.local.set({ fleetSnapshot: snapshot });
+  chrome.runtime
+    .sendMessage({ type: "launcher.fleet", snapshot })
+    .catch(() => {});
+}
+
+function describeMode(message) {
+  if (message.vpnEnabled) {
+    return "Surfshark VPN";
+  }
+  return message.directMode ? "direct dry-run" : "proxied";
+}
+
 function describeNativeMessage(message) {
   switch (message.type) {
     case "ready":
@@ -30,7 +46,7 @@ function describeNativeMessage(message) {
         kind: "working",
         message: `Launching ${message.count} authorized test session${
           message.count === 1 ? "" : "s"
-        } in ${message.directMode ? "direct dry-run" : "proxied"} mode, with up to ${
+        } in ${describeMode(message)} mode, with up to ${
           message.maxActive
         } active at once…`,
       };
@@ -82,6 +98,11 @@ function connectNativeHost() {
   nativePort = port;
 
   port.onMessage.addListener((message) => {
+    // Telemetry arrives on a timer and must not overwrite the launch status.
+    if (message?.type === "fleet") {
+      void publishFleet(message.snapshot);
+      return;
+    }
     void publishStatus(describeNativeMessage(message));
   });
 
@@ -110,6 +131,18 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
       .get("launcherStatus")
       .then(({ launcherStatus }) => {
         sendResponse({ ok: true, status: launcherStatus || lastStatus });
+      })
+      .catch((error) => {
+        sendResponse({ ok: false, error: error.message });
+      });
+    return true;
+  }
+
+  if (message?.type === "launcher.getFleet") {
+    chrome.storage.local
+      .get("fleetSnapshot")
+      .then(({ fleetSnapshot }) => {
+        sendResponse({ ok: true, snapshot: fleetSnapshot || lastFleet });
       })
       .catch((error) => {
         sendResponse({ ok: false, error: error.message });

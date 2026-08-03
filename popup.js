@@ -1,3 +1,7 @@
+import { COUNTRY_CATALOGUE } from "./native-host/countries.js";
+
+const MAX_ACTIVE_SESSIONS = 20;
+
 const form = document.querySelector("#launcher-form");
 const targetUrlInput = document.querySelector("#target-url");
 const countInput = document.querySelector("#session-count");
@@ -13,6 +17,26 @@ const generateEnvironmentsButton = document.querySelector(
 );
 const statusCard = document.querySelector("#status-card");
 const statusText = document.querySelector("#status-text");
+
+const vpnEnabledInput = document.querySelector("#vpn-enabled");
+const vpnDetails = document.querySelector("#vpn-details");
+const vpnPathInput = document.querySelector("#vpn-extension-path");
+const vpnUsernameInput = document.querySelector("#vpn-username");
+const vpnPasswordInput = document.querySelector("#vpn-password");
+const countryGrid = document.querySelector("#country-grid");
+const countryCounter = document.querySelector("#country-counter");
+const autoPickButton = document.querySelector("#auto-pick");
+const clearCountriesButton = document.querySelector("#clear-countries");
+
+const dashboardEnabledInput = document.querySelector("#dashboard-enabled");
+const dashboardCornerInput = document.querySelector("#dashboard-corner");
+const dashboardRefreshInput = document.querySelector("#dashboard-refresh");
+
+const fleetSummary = document.querySelector("#fleet-summary");
+const fleetCounts = document.querySelector("#fleet-counts");
+const fleetList = document.querySelector("#fleet-list");
+
+const selectedCountries = new Set();
 
 const ENVIRONMENT_PRESETS = [
   "1366x768 | en-US | America/New_York",
@@ -36,6 +60,19 @@ const ENVIRONMENT_PRESETS = [
   "2560x1440 | ar-AE | Asia/Dubai",
   "3840x2160 | en-ZA | Africa/Johannesburg",
 ];
+
+const STATE_LABELS = {
+  queued: "queued",
+  launching: "launching",
+  "vpn-signin": "VPN sign-in",
+  "vpn-connecting": "VPN connecting",
+  "vpn-connected": "VPN ready",
+  "ip-check": "IP check",
+  navigating: "loading",
+  running: "running",
+  failed: "failed",
+  closed: "closed",
+};
 
 function nonEmptyLines(value) {
   return value
@@ -67,6 +104,11 @@ function parseEnvironments(value) {
   });
 }
 
+function requiredCountryCount() {
+  const count = Number.parseInt(countInput.value, 10) || 1;
+  return Math.min(count, MAX_ACTIVE_SESSIONS);
+}
+
 function showStatus(status) {
   const kind = status?.kind || "idle";
   statusCard.className = `status ${kind}`;
@@ -74,17 +116,137 @@ function showStatus(status) {
   launchButton.disabled = kind === "working";
 }
 
-function syncDirectMode() {
+/* ------------------------------------------------------------------ *
+ * Country pool
+ * ------------------------------------------------------------------ */
+
+function renderCountryGrid() {
+  countryGrid.replaceChildren(
+    ...COUNTRY_CATALOGUE.map((country) => {
+      const chip = document.createElement("button");
+      chip.type = "button";
+      chip.className = "chip";
+      chip.dataset.code = country.code;
+      chip.textContent = country.code;
+      chip.title = country.name;
+      chip.setAttribute("aria-pressed", "false");
+      chip.addEventListener("click", () => {
+        if (selectedCountries.has(country.code)) {
+          selectedCountries.delete(country.code);
+        } else {
+          selectedCountries.add(country.code);
+        }
+        syncCountrySelection();
+      });
+      return chip;
+    }),
+  );
+}
+
+function syncCountrySelection() {
+  for (const chip of countryGrid.children) {
+    const on = selectedCountries.has(chip.dataset.code);
+    chip.classList.toggle("selected", on);
+    chip.setAttribute("aria-pressed", String(on));
+  }
+
+  const needed = requiredCountryCount();
+  const short = selectedCountries.size < needed;
+  countryCounter.textContent = `${selectedCountries.size} selected · ${needed} needed`;
+  countryCounter.classList.toggle("short", short && vpnEnabledInput.checked);
+}
+
+function autoPickCountries() {
+  const needed = requiredCountryCount();
+  for (const country of COUNTRY_CATALOGUE) {
+    if (selectedCountries.size >= needed) {
+      break;
+    }
+    selectedCountries.add(country.code);
+  }
+  syncCountrySelection();
+}
+
+/* ------------------------------------------------------------------ *
+ * Mode wiring
+ * ------------------------------------------------------------------ */
+
+function syncModes() {
+  const vpnMode = vpnEnabledInput.checked;
+
+  if (vpnMode) {
+    // VPN routing happens inside the profile, so Playwright must connect
+    // directly; stacking an IPRoyal proxy on top would double-route.
+    directModeInput.checked = true;
+  }
+  directModeInput.disabled = vpnMode;
+
   const directMode = directModeInput.checked;
   proxiesInput.disabled = directMode;
   proxiesInput.required = !directMode;
   proxyField.classList.toggle("disabled", directMode);
+
+  vpnDetails.hidden = !vpnMode;
+  vpnPathInput.required = vpnMode;
+  vpnUsernameInput.required = vpnMode;
+  vpnPasswordInput.required = vpnMode;
+
+  syncCountrySelection();
 }
 
+/* ------------------------------------------------------------------ *
+ * Live fleet summary
+ * ------------------------------------------------------------------ */
+
+function renderFleet(snapshot) {
+  if (!snapshot || !Array.isArray(snapshot.sessions) || snapshot.sessions.length === 0) {
+    fleetSummary.hidden = true;
+    return;
+  }
+
+  fleetSummary.hidden = false;
+  const run = snapshot.run || {};
+  fleetCounts.textContent = `${run.active ?? 0} active · ${run.queued ?? 0} queued${
+    run.failed ? ` · ${run.failed} failed` : ""
+  }`;
+
+  fleetList.replaceChildren(
+    ...snapshot.sessions.map((session) => {
+      const item = document.createElement("li");
+      item.className = `fleet-row ${session.state}`;
+
+      const label = session.country ? session.country.code : "··";
+      const detail = [
+        STATE_LABELS[session.state] || session.state,
+        session.ip,
+        Number.isFinite(session.rssBytes)
+          ? `${Math.round(session.rssBytes / 1024 / 1024)} MB`
+          : null,
+      ]
+        .filter(Boolean)
+        .join(" · ");
+
+      item.innerHTML =
+        `<span class="fleet-index">${session.index}</span>` +
+        `<span class="fleet-cc">${label}</span>` +
+        `<span class="fleet-detail"></span>`;
+      item.querySelector(".fleet-detail").textContent = detail;
+      return item;
+    }),
+  );
+}
+
+/* ------------------------------------------------------------------ *
+ * Preferences
+ * ------------------------------------------------------------------ */
+
 async function restorePreferences() {
-  const [{ preferences }, state] = await Promise.all([
+  renderCountryGrid();
+
+  const [{ preferences }, state, fleet] = await Promise.all([
     chrome.storage.local.get("preferences"),
     chrome.runtime.sendMessage({ type: "launcher.getState" }),
+    chrome.runtime.sendMessage({ type: "launcher.getFleet" }),
   ]);
 
   if (preferences) {
@@ -93,14 +255,31 @@ async function restorePreferences() {
     environmentsInput.value =
       preferences.environmentsText || environmentsInput.value;
     directModeInput.checked = preferences.directMode === true;
+    vpnEnabledInput.checked = preferences.vpnEnabled === true;
+    vpnPathInput.value = preferences.vpnExtensionPath || "";
+    vpnUsernameInput.value = preferences.vpnUsername || "";
+    dashboardEnabledInput.checked = preferences.dashboardEnabled !== false;
+    dashboardCornerInput.value = preferences.dashboardCorner || "bottom-right";
+    dashboardRefreshInput.value = preferences.dashboardRefreshMs || 4000;
+
+    for (const code of preferences.countries || []) {
+      selectedCountries.add(code);
+    }
   }
 
-  syncDirectMode();
+  syncModes();
 
   if (state?.ok) {
     showStatus(state.status);
   }
+  if (fleet?.ok) {
+    renderFleet(fleet.snapshot);
+  }
 }
+
+/* ------------------------------------------------------------------ *
+ * Actions
+ * ------------------------------------------------------------------ */
 
 form.addEventListener("submit", async (event) => {
   event.preventDefault();
@@ -117,7 +296,8 @@ form.addEventListener("submit", async (event) => {
     }
 
     const environments = parseEnvironments(environmentsInput.value);
-    const directMode = directModeInput.checked;
+    const vpnEnabled = vpnEnabledInput.checked;
+    const directMode = vpnEnabled || directModeInput.checked;
     const proxyLines = directMode ? [] : nonEmptyLines(proxiesInput.value);
 
     if (environments.length !== count) {
@@ -135,6 +315,33 @@ form.addEventListener("submit", async (event) => {
     if (new Set(dimensions).size !== dimensions.length) {
       throw new Error("Every session must use different screen dimensions.");
     }
+
+    const countries = [...selectedCountries];
+    let vpn;
+    if (vpnEnabled) {
+      const needed = Math.min(count, MAX_ACTIVE_SESSIONS);
+      if (!vpnPathInput.value.trim()) {
+        throw new Error("Enter the unpacked Surfshark extension folder.");
+      }
+      if (!vpnUsernameInput.value.trim() || !vpnPasswordInput.value) {
+        throw new Error("Enter the Surfshark account email and password.");
+      }
+      if (countries.length < needed) {
+        throw new Error(
+          `Select at least ${needed} countries so every open profile gets a unique one. ${countries.length} selected.`,
+        );
+      }
+
+      vpn = {
+        enabled: true,
+        provider: "surfshark",
+        extensionPath: vpnPathInput.value.trim(),
+        username: vpnUsernameInput.value.trim(),
+        password: vpnPasswordInput.value,
+        countries,
+      };
+    }
+
     if (!authorizedInput.checked) {
       throw new Error("Confirm that the target is authorized for testing.");
     }
@@ -144,7 +351,14 @@ form.addEventListener("submit", async (event) => {
         targetUrl: targetUrl.href,
         count,
         environmentsText: environmentsInput.value,
-        directMode,
+        directMode: directModeInput.checked,
+        vpnEnabled,
+        vpnExtensionPath: vpnPathInput.value.trim(),
+        vpnUsername: vpnUsernameInput.value.trim(),
+        countries,
+        dashboardEnabled: dashboardEnabledInput.checked,
+        dashboardCorner: dashboardCornerInput.value,
+        dashboardRefreshMs: Number(dashboardRefreshInput.value) || 4000,
       },
     });
 
@@ -157,6 +371,12 @@ form.addEventListener("submit", async (event) => {
         environments,
         proxyLines,
         directMode,
+        vpn,
+        dashboard: {
+          enabled: dashboardEnabledInput.checked,
+          corner: dashboardCornerInput.value,
+          refreshMs: Number(dashboardRefreshInput.value) || 4000,
+        },
         authorized: true,
       },
     });
@@ -166,6 +386,7 @@ form.addEventListener("submit", async (event) => {
     }
 
     proxiesInput.value = "";
+    vpnPasswordInput.value = "";
   } catch (error) {
     showStatus({ kind: "error", message: error.message });
   }
@@ -177,7 +398,7 @@ generateEnvironmentsButton.addEventListener("click", () => {
     Math.min(100, Number.parseInt(countInput.value, 10) || 1),
   );
   countInput.value = String(count);
-  
+
   const generated = [];
   for (let i = 0; i < count; i++) {
     if (i < ENVIRONMENT_PRESETS.length) {
@@ -189,9 +410,17 @@ generateEnvironmentsButton.addEventListener("click", () => {
     }
   }
   environmentsInput.value = generated.join("\n");
+  syncCountrySelection();
 });
 
-directModeInput.addEventListener("change", syncDirectMode);
+autoPickButton.addEventListener("click", autoPickCountries);
+clearCountriesButton.addEventListener("click", () => {
+  selectedCountries.clear();
+  syncCountrySelection();
+});
+countInput.addEventListener("input", syncCountrySelection);
+vpnEnabledInput.addEventListener("change", syncModes);
+directModeInput.addEventListener("change", syncModes);
 
 stopButton.addEventListener("click", async () => {
   try {
@@ -200,6 +429,7 @@ stopButton.addEventListener("click", async () => {
     if (!response?.ok) {
       throw new Error(response?.error || "Unable to stop test sessions.");
     }
+    fleetSummary.hidden = true;
   } catch (error) {
     showStatus({ kind: "error", message: error.message });
   }
@@ -208,6 +438,9 @@ stopButton.addEventListener("click", async () => {
 chrome.runtime.onMessage.addListener((message) => {
   if (message?.type === "launcher.status") {
     showStatus(message.status);
+  }
+  if (message?.type === "launcher.fleet") {
+    renderFleet(message.snapshot);
   }
 });
 

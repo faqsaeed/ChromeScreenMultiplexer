@@ -1,3 +1,5 @@
 native-host/node_modules/
 native-host/.node-path
+native-host/com.local.chrome_qa_launcher.json
+native-host/vpn/surfshark.selectors.local.json
 .DS_Store

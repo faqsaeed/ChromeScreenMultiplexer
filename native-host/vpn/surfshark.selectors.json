@@ -1,0 +1,65 @@
+{
+  "_comment": [
+    "Selector map for the Surfshark Chrome extension popup.",
+    "Every step tries its candidates in order and uses the first one that",
+    "becomes visible, so a mix of text-based and CSS candidates is fine.",
+    "Strings are Playwright selectors: 'text=', 'css=', 'xpath=' prefixes all work.",
+    "'{country}' is replaced with the catalogue label, e.g. 'Germany'.",
+    "If Surfshark changes its popup, fix the candidate lists here - no code change needed."
+  ],
+  "popupPaths": ["popup.html", "index.html", "popup/index.html", "src/popup.html"],
+  "steps": {
+    "signedInIndicator": [
+      "text=/^\\s*(Connect|Disconnect|Connected|Quick-connect|Quick connect)\\s*$/i",
+      "css=[data-testid='connect-button']",
+      "css=[data-testid='locations-list']"
+    ],
+    "emailInput": [
+      "css=input[type='email']",
+      "css=input[name='email']",
+      "css=input[autocomplete='username']",
+      "css=input[placeholder*='mail' i]"
+    ],
+    "passwordInput": [
+      "css=input[type='password']",
+      "css=input[name='password']",
+      "css=input[autocomplete='current-password']"
+    ],
+    "submitLogin": [
+      "css=[data-testid='login-button']",
+      "text=/^\\s*(Log in|Login|Sign in|Continue)\\s*$/i",
+      "css=button[type='submit']"
+    ],
+    "loginError": [
+      "css=[data-testid='login-error']",
+      "text=/incorrect|invalid|wrong password|try again|too many/i"
+    ],
+    "openLocations": [
+      "css=[data-testid='locations-tab']",
+      "text=/^\\s*(Locations|All locations|Servers|Choose location)\\s*$/i",
+      "css=[data-testid='current-location']"
+    ],
+    "locationSearch": [
+      "css=[data-testid='locations-search']",
+      "css=input[placeholder*='search' i]",
+      "css=input[type='search']"
+    ],
+    "countryOption": [
+      "css=[data-testid='location-item'][data-country='{country}']",
+      "xpath=//*[@role='option' or @role='button' or self::li or self::button][normalize-space(.)='{country}']",
+      "text={country}"
+    ],
+    "connectButton": [
+      "css=[data-testid='connect-button']",
+      "text=/^\\s*Connect\\s*$/i"
+    ],
+    "connectedIndicator": [
+      "css=[data-testid='connection-status'][data-state='connected']",
+      "text=/^\\s*(Connected|Disconnect)\\s*$/i"
+    ],
+    "connectionError": [
+      "css=[data-testid='connection-error']",
+      "text=/connection failed|couldn't connect|could not connect|unable to connect/i"
+    ]
+  }
+}

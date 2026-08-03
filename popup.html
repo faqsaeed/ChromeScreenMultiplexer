@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Chrome QA Launcher</title>
     <link rel="stylesheet" href="popup.css" />
-    <script src="popup.js" defer></script>
+    <script src="popup.js" type="module"></script>
   </head>
   <body>
     <main>
@@ -13,7 +13,7 @@
         <p class="eyebrow">AUTHORIZED QA</p>
         <h1>Isolated Chrome sessions</h1>
         <p class="intro">
-          Open separate Chrome processes with explicit IPRoyal and display settings.
+          Open separate Chrome processes with explicit routing and display settings.
         </p>
       </header>
 
@@ -54,6 +54,80 @@
           </button>
         </label>
 
+        <fieldset id="vpn-field">
+          <legend>Surfshark VPN per profile</legend>
+
+          <label class="authorization">
+            <input id="vpn-enabled" type="checkbox" />
+            <span>
+              <strong>Assign one VPN country per Chrome profile</strong><br />
+              Each profile loads the Surfshark extension, signs in, and connects to
+              a country no other running profile holds.
+            </span>
+          </label>
+
+          <div id="vpn-details" class="stack" hidden>
+            <label>
+              <span>Unpacked Surfshark extension folder</span>
+              <small>
+                Absolute path to the directory that contains the extension's
+                manifest.json.
+              </small>
+              <input
+                id="vpn-extension-path"
+                type="text"
+                spellcheck="false"
+                autocomplete="off"
+                placeholder="C:\surfshark-extension"
+              />
+            </label>
+
+            <div class="pair">
+              <label>
+                <span>Surfshark email</span>
+                <input
+                  id="vpn-username"
+                  type="email"
+                  spellcheck="false"
+                  autocomplete="off"
+                  placeholder="qa@example.com"
+                />
+              </label>
+              <label>
+                <span>Password</span>
+                <small>Not saved.</small>
+                <input
+                  id="vpn-password"
+                  type="password"
+                  autocomplete="off"
+                  placeholder="••••••••"
+                />
+              </label>
+            </div>
+
+            <div class="picker">
+              <div class="picker-head">
+                <span>Country pool</span>
+                <span id="country-counter" class="counter">0 selected</span>
+              </div>
+              <small id="country-hint">
+                The pool must cover every simultaneously open profile. A country
+                is released when its Chrome window closes and reused by the next
+                queued session.
+              </small>
+              <div id="country-grid" class="chip-grid"></div>
+              <div class="picker-actions">
+                <button id="auto-pick" class="text-button" type="button">
+                  Auto-pick the minimum unique set
+                </button>
+                <button id="clear-countries" class="text-button" type="button">
+                  Clear
+                </button>
+              </div>
+            </div>
+          </div>
+        </fieldset>
+
         <label id="proxy-field">
           <span>IPRoyal proxies</span>
           <small>One unique sticky proxy per session. Credentials are not saved.</small>
@@ -71,10 +145,44 @@
           <input id="direct-mode" type="checkbox" />
           <span>
             <strong>Direct-connection dry run</strong><br />
-            Test launching and isolation without proxies. Every session will share
-            this computer’s normal public IP.
+            Test launching and isolation without IPRoyal. Required by VPN mode,
+            which routes through the Surfshark extension instead.
           </span>
         </label>
+
+        <fieldset id="monitor-field">
+          <legend>Fleet monitor</legend>
+          <label class="authorization">
+            <input id="dashboard-enabled" type="checkbox" checked />
+            <span>
+              <strong>Open the live stats window</strong><br />
+              A corner window showing every running and queued profile with its
+              RAM, CPU, exit IP, and VPN country.
+            </span>
+          </label>
+          <div class="pair">
+            <label>
+              <span>Corner</span>
+              <select id="dashboard-corner">
+                <option value="bottom-right">Bottom right</option>
+                <option value="bottom-left">Bottom left</option>
+                <option value="top-right">Top right</option>
+                <option value="top-left">Top left</option>
+              </select>
+            </label>
+            <label>
+              <span>Refresh (ms)</span>
+              <input
+                id="dashboard-refresh"
+                type="number"
+                min="1000"
+                max="30000"
+                step="500"
+                value="4000"
+              />
+            </label>
+          </div>
+        </fieldset>
 
         <label class="authorization">
           <input id="authorized" type="checkbox" required />
@@ -95,9 +203,17 @@
         <p id="status-text">Ready to launch authorized test sessions.</p>
       </section>
 
+      <section id="fleet-summary" hidden>
+        <div class="fleet-head">
+          <span>Live fleet</span>
+          <span id="fleet-counts" class="counter">—</span>
+        </div>
+        <ul id="fleet-list"></ul>
+      </section>
+
       <p class="footnote">
-        Separate proxy configurations do not guarantee unique exit IPs. Verify them
-        only through an endpoint you are authorized to test.
+        Separate proxy or VPN configurations do not guarantee unique exit IPs.
+        Verify them only through an endpoint you are authorized to test.
       </p>
     </main>
   </body>

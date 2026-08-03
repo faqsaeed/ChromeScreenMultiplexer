@@ -253,3 +253,215 @@ button:disabled {
   font-size: 10px;
   line-height: 1.45;
 }
+
+/* ---- Fieldsets ---- */
+
+fieldset {
+  display: grid;
+  gap: 11px;
+  margin: 0;
+  border: 1px solid #313c34;
+  border-radius: 10px;
+  padding: 12px;
+  background: rgb(255 255 255 / 2%);
+}
+
+legend {
+  padding: 0 6px;
+  color: #85d7a0;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.13em;
+  text-transform: uppercase;
+}
+
+fieldset .authorization {
+  border: 0;
+  padding: 0;
+  background: none;
+}
+
+.stack {
+  display: grid;
+  gap: 11px;
+}
+
+.stack[hidden] {
+  display: none;
+}
+
+.pair {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 9px;
+  align-items: end;
+}
+
+input[type="text"],
+input[type="email"],
+input[type="password"],
+select {
+  width: 100%;
+  height: 40px;
+  padding: 0 11px;
+  border: 1px solid #344039;
+  border-radius: 9px;
+  outline: none;
+  background: #171d19;
+  color: #eef4ed;
+  font: inherit;
+}
+
+input[type="text"],
+input[type="email"],
+input[type="password"] {
+  font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+  font-size: 11px;
+}
+
+select:focus {
+  border-color: #68c589;
+  box-shadow: 0 0 0 3px rgb(104 197 137 / 12%);
+}
+
+/* ---- Country picker ---- */
+
+.picker {
+  display: grid;
+  gap: 7px;
+}
+
+.picker-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.counter {
+  color: #89958b;
+  font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+  font-size: 10px;
+  font-weight: 500;
+}
+
+.counter.short {
+  color: #ef6f6c;
+}
+
+.chip-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  max-height: 132px;
+  overflow-y: auto;
+  border: 1px solid #2b352e;
+  border-radius: 9px;
+  padding: 8px;
+  background: #141a16;
+}
+
+.chip {
+  min-height: 0;
+  border: 1px solid #35423a;
+  border-radius: 5px;
+  padding: 3px 6px;
+  background: #1b221d;
+  color: #93a096;
+  font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  cursor: pointer;
+}
+
+.chip:hover {
+  border-color: #4a5a4f;
+  color: #d4ddd5;
+}
+
+.chip.selected {
+  border-color: #68c589;
+  background: #75d395;
+  color: #0d2114;
+}
+
+.picker-actions {
+  display: flex;
+  gap: 14px;
+}
+
+/* ---- Live fleet summary ---- */
+
+#fleet-summary {
+  margin-top: 12px;
+  border: 1px solid #303a33;
+  border-radius: 9px;
+  padding: 10px 11px;
+  background: #151b17;
+}
+
+#fleet-summary[hidden] {
+  display: none;
+}
+
+.fleet-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  margin-bottom: 7px;
+  font-size: 11px;
+  font-weight: 750;
+}
+
+#fleet-list {
+  display: grid;
+  gap: 3px;
+  max-height: 148px;
+  overflow-y: auto;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.fleet-row {
+  display: grid;
+  grid-template-columns: 18px 26px 1fr;
+  gap: 7px;
+  align-items: center;
+  font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+  font-size: 10px;
+  color: #93a096;
+}
+
+.fleet-index {
+  color: #667169;
+  text-align: right;
+}
+
+.fleet-cc {
+  border: 1px solid #35423a;
+  border-radius: 4px;
+  padding: 1px 3px;
+  color: #93a096;
+  font-weight: 700;
+  text-align: center;
+}
+
+.fleet-row.running .fleet-cc {
+  border-color: #2f4a39;
+  background: rgb(117 211 149 / 12%);
+  color: #a9e6c0;
+}
+
+.fleet-row.failed .fleet-cc {
+  border-color: #5c2f2f;
+  color: #ef6f6c;
+}
+
+.fleet-detail {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
