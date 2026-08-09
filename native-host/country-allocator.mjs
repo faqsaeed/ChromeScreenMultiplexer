@@ -4,11 +4,8 @@ import { findCountry } from "./countries.js";
  * Tracks which VPN country each live Chrome profile holds.
  *
  * Two Chrome profiles are never allowed to hold the same country at the same
- * time. A country is only returned to the pool when its session closes, so a
- * queued session can then reuse it. When the pool is at least as large as the
- * run, every session in the run also gets a country nothing else has used yet:
- * `claim` always prefers the never-used entries first, then the least recently
- * released one.
+ * time. Persistent personas use `claimCode` to reserve their fixed assignment;
+ * `claim` remains available for legacy dynamically allocated runs.
  */
 export class CountryAllocator {
   #entries = new Map();
@@ -79,6 +76,27 @@ export class CountryAllocator {
     const entry = free[0];
     entry.holder = holder;
     entry.useCount += 1;
+    return this.describe(entry.code);
+  }
+
+  /** Reserve the country permanently assigned to a numbered profile. */
+  claimCode(code, holder) {
+    if (!holder) {
+      throw new Error("A country claim requires a session holder.");
+    }
+    const entry = this.#entries.get(String(code || "").toUpperCase());
+    if (!entry) {
+      throw new Error(`Unknown VPN country "${code}".`);
+    }
+    if (entry.holder && entry.holder !== holder) {
+      throw new Error(
+        `${entry.name} is already held by another running profile.`,
+      );
+    }
+    if (!entry.holder) {
+      entry.holder = holder;
+      entry.useCount += 1;
+    }
     return this.describe(entry.code);
   }
 

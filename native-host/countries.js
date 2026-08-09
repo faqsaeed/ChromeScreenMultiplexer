@@ -93,3 +93,60 @@ export function defaultCountryPool(size) {
 }
 
 export const MAX_UNIQUE_COUNTRIES = COUNTRY_CATALOGUE.length;
+
+// Stable regional persona data used by both the popup generator and the native
+// host. A numbered profile always receives the country at the same position in
+// the selected list, together with that country's locale and timezone.
+const PERSONA_BY_COUNTRY = {
+  AL: ["sq-AL", "Europe/Tirane"], AR: ["es-AR", "America/Argentina/Buenos_Aires"],
+  AU: ["en-AU", "Australia/Sydney"], AT: ["de-AT", "Europe/Vienna"],
+  AZ: ["az-AZ", "Asia/Baku"], BE: ["nl-BE", "Europe/Brussels"],
+  BA: ["bs-BA", "Europe/Sarajevo"], BR: ["pt-BR", "America/Sao_Paulo"],
+  BG: ["bg-BG", "Europe/Sofia"], CA: ["en-CA", "America/Toronto"],
+  CL: ["es-CL", "America/Santiago"], CO: ["es-CO", "America/Bogota"],
+  CR: ["es-CR", "America/Costa_Rica"], HR: ["hr-HR", "Europe/Zagreb"],
+  CY: ["el-CY", "Asia/Nicosia"], CZ: ["cs-CZ", "Europe/Prague"],
+  DK: ["da-DK", "Europe/Copenhagen"], EE: ["et-EE", "Europe/Tallinn"],
+  FI: ["fi-FI", "Europe/Helsinki"], FR: ["fr-FR", "Europe/Paris"],
+  GE: ["ka-GE", "Asia/Tbilisi"], DE: ["de-DE", "Europe/Berlin"],
+  GR: ["el-GR", "Europe/Athens"], HK: ["zh-HK", "Asia/Hong_Kong"],
+  HU: ["hu-HU", "Europe/Budapest"], IS: ["is-IS", "Atlantic/Reykjavik"],
+  IN: ["en-IN", "Asia/Kolkata"], ID: ["id-ID", "Asia/Jakarta"],
+  IE: ["en-IE", "Europe/Dublin"], IL: ["he-IL", "Asia/Jerusalem"],
+  IT: ["it-IT", "Europe/Rome"], JP: ["ja-JP", "Asia/Tokyo"],
+  KZ: ["kk-KZ", "Asia/Almaty"], LV: ["lv-LV", "Europe/Riga"],
+  LT: ["lt-LT", "Europe/Vilnius"], LU: ["fr-LU", "Europe/Luxembourg"],
+  MY: ["ms-MY", "Asia/Kuala_Lumpur"], MX: ["es-MX", "America/Mexico_City"],
+  MD: ["ro-MD", "Europe/Chisinau"], NL: ["nl-NL", "Europe/Amsterdam"],
+  NZ: ["en-NZ", "Pacific/Auckland"], NG: ["en-NG", "Africa/Lagos"],
+  MK: ["mk-MK", "Europe/Skopje"], NO: ["nb-NO", "Europe/Oslo"],
+  PY: ["es-PY", "America/Asuncion"], PH: ["en-PH", "Asia/Manila"],
+  PL: ["pl-PL", "Europe/Warsaw"], PT: ["pt-PT", "Europe/Lisbon"],
+  RO: ["ro-RO", "Europe/Bucharest"], RS: ["sr-RS", "Europe/Belgrade"],
+  SG: ["en-SG", "Asia/Singapore"], SK: ["sk-SK", "Europe/Bratislava"],
+  SI: ["sl-SI", "Europe/Ljubljana"], ZA: ["en-ZA", "Africa/Johannesburg"],
+  KR: ["ko-KR", "Asia/Seoul"], ES: ["es-ES", "Europe/Madrid"],
+  SE: ["sv-SE", "Europe/Stockholm"], CH: ["de-CH", "Europe/Zurich"],
+  TW: ["zh-TW", "Asia/Taipei"], TH: ["th-TH", "Asia/Bangkok"],
+  TR: ["tr-TR", "Europe/Istanbul"], UA: ["uk-UA", "Europe/Kyiv"],
+  AE: ["ar-AE", "Asia/Dubai"], GB: ["en-GB", "Europe/London"],
+  US: ["en-US", "America/New_York"], VN: ["vi-VN", "Asia/Ho_Chi_Minh"],
+};
+
+const SCREEN_PRESETS = [
+  [1366, 768], [1440, 900], [1536, 864], [1280, 720], [1600, 900],
+  [1920, 1080], [1280, 800], [1680, 1050], [1024, 768], [1280, 1024],
+  [1440, 960], [1600, 1000], [1360, 768], [1470, 956], [1512, 982],
+  [1728, 1117], [1920, 1200], [2048, 1152], [2560, 1440], [3840, 2160],
+];
+
+export function personaForCountry(code, slotIndex = 0) {
+  const country = findCountry(code);
+  if (!country) {
+    return null;
+  }
+  const [locale, timezoneId] = PERSONA_BY_COUNTRY[country.code] || ["en-US", "UTC"];
+  const preset = SCREEN_PRESETS[slotIndex];
+  const [width, height] = preset || [1000 + slotIndex * 17, 700 + slotIndex * 9];
+  return { country, width, height, locale, timezoneId };
+}

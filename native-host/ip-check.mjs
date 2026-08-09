@@ -7,6 +7,13 @@
  */
 const ENDPOINTS = [
   {
+    url: "https://api.country.is/",
+    map: (data) => ({
+      ip: data.ip,
+      countryCode: data.country,
+    }),
+  },
+  {
     url: "https://ipinfo.io/json",
     map: (data) => ({
       ip: data.ip,
@@ -41,8 +48,8 @@ function extractJson(text) {
   return JSON.parse(text.slice(start, end + 1));
 }
 
-async function fetchFromPage(page, url, timeoutMs) {
-  return page.evaluate(
+async function fetchFromTarget(target, url, timeoutMs) {
+  return target.evaluate(
     async ([target, timeout]) => {
       const controller = new AbortController();
       const timer = setTimeout(() => controller.abort(), timeout);
@@ -63,18 +70,42 @@ async function fetchFromPage(page, url, timeoutMs) {
   );
 }
 
+async function readEndpoint(target, page, url, timeoutMs) {
+  if (!page) {
+    return fetchFromTarget(target, url, timeoutMs);
+  }
+  const response = await page.goto(url, {
+    waitUntil: "domcontentloaded",
+    timeout: timeoutMs,
+  });
+  if (!response?.ok()) {
+    throw new Error(`HTTP ${response?.status() || "unknown"}`);
+  }
+  return page.locator("body").innerText({ timeout: timeoutMs });
+}
+
 export async function probePublicIp(context, options = {}) {
   const timeoutMs = options.timeoutMs ?? 15_000;
   let page;
+  let target = null;
 
   try {
-    page = await context.newPage();
-    await page.goto("about:blank", { timeout: timeoutMs });
+    if (options.serviceWorkerOnly) {
+      target = context
+        .serviceWorkers()
+        .find((worker) => worker.url().startsWith("chrome-extension://"));
+      if (!target) {
+        throw new Error("Surfshark extension worker is not active yet.");
+      }
+    } else {
+      page = await context.newPage();
+      target = page;
+    }
 
     const failures = [];
     for (const endpoint of ENDPOINTS) {
       try {
-        const body = await fetchFromPage(page, endpoint.url, timeoutMs);
+        const body = await readEndpoint(target, page, endpoint.url, timeoutMs);
         const result = endpoint.map(extractJson(body));
         if (!result.ip) {
           throw new Error("Response did not include an IP address.");

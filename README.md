@@ -3,9 +3,8 @@
 This project launches separate, visible Chrome processes for authorized browser
 compatibility and regional QA. Each process receives:
 
-- its own temporary Chrome profile and browser storage;
-- one explicit route to the internet — either an HTTP/HTTPS/SOCKS5 proxy or a
-  Surfshark VPN country no other running profile holds;
+- its own numbered, persistent Chrome profile and browser storage;
+- one fixed Surfshark VPN country bound to that profile;
 - one viewport and emulated screen size;
 - one locale and timezone configuration; and
 - the same user-supplied test URL.
@@ -21,29 +20,21 @@ Use this only on a site you own or have written permission to test. It does not
 automate accounts, clicks, engagement, CAPTCHAs, or access-control bypasses. It is
 not an anti-detect browser and does not make sessions represent different people.
 
-The launcher accepts up to 100 test configurations and keeps at most 20 Chrome
-processes active simultaneously. Extra configurations remain queued; closing an
-active test window opens the next one. Proxy and VPN credentials are sent only to
-the local native companion and are not saved by the extension. Temporary profiles
-are removed when sessions close or when **Stop all** is used, on a best-effort
-basis.
+The Surfshark launcher accepts up to 66 persistent profiles (one per country in
+the bundled catalogue) and keeps at most 20 Chrome processes active
+simultaneously. You choose the initial active count and whether queue vacancies
+are filled automatically or only when **Promote next queued** is clicked. VPN
+credentials are sent only to the local native companion and are not saved.
+Cookies, cache, extension login, and other profile storage survive normal closes
+and **Stop all**; use the per-row **Reset** control to wipe one profile.
 
 ## Requirements
 
 - Windows 10/11, macOS, or Linux
 - Google Chrome
 - Node.js 20 or newer
-- For proxy mode: one unique IPRoyal proxy configuration per test session
-- For VPN mode: a Surfshark account and the unpacked Surfshark Chrome extension
-
-For IPRoyal Residential, generate a sticky proxy list in the dashboard using:
-
-```text
-host:port:username:password
-```
-
-Use a distinct sticky session identifier in each row. A unique configuration does
-not itself guarantee that the provider assigned a unique exit IP.
+- For VPN mode: a Surfshark account; install its Chrome Web Store extension
+  manually inside each persistent window created by **Prepare profiles**
 
 ## Install
 
@@ -81,23 +72,22 @@ restricted environment.
 
 1. Open the extension.
 2. Enter the owned or authorized test URL.
-3. Choose a session count from 1 to 100. Use **Generate rows for session count**
-   if you want a complete starter environment matrix.
-4. Enter exactly one environment row per session:
-
-   ```text
-   1366x768 | en-US | America/New_York
-   1440x900 | en-GB | Europe/London
-   1536x864 | en-SG | Asia/Singapore
-   ```
-
-5. Choose a routing mode: paste one unique IPRoyal proxy row per session, enable
-   **Direct-connection dry run**, or enable **Surfshark VPN per profile**.
-6. Confirm authorization and select **Launch sessions**.
-7. Up to 20 processes open initially. If more configurations are queued, closing
-   one active Chrome window opens the next.
-8. Use **Stop all** to close the launched processes, cancel the queue, close the
-   fleet monitor, and remove temporary profiles.
+3. Choose how many persistent profiles to use (24 by default), how many to open
+   initially (up to 20), and automatic or manual queue control.
+4. Select one Surfshark country per profile and choose **Generate
+   country-matched personas**. The country, locale, timezone, and screen size are
+   bound to the numbered slot and saved across launches.
+5. For the first run, confirm authorization and choose **Prepare profiles**.
+   It opens blank persistent Chrome windows and does not navigate or close them.
+   Install Surfshark yourself, sign in, and connect the country shown for that
+   profile in the fleet monitor.
+6. On later runs, leave the credentials blank and choose **Launch sessions**.
+   The launcher uses the saved Surfshark login, reconnects the assigned country,
+   checks the exit IP, and then opens the current target URL.
+   Profiles start two at a time to avoid starving Chrome extension workers, but
+   the selected active limit still controls how many remain open concurrently.
+7. Use **Stop all** to close the launched processes and cancel the queue. Saved
+   profile storage is retained.
 
 ## Fleet monitor
 
@@ -106,16 +96,28 @@ screen corner while the run is in progress. It refreshes on the interval you set
 (1–30 s) and shows, for every configured session:
 
 - state — queued, launching, VPN sign-in, VPN connecting, IP check, loading,
-  running, failed, or closed;
+  running, needs attention, failed, or closed;
 - assigned VPN country, flagged red when the measured exit country disagrees;
 - public exit IP and city, read from inside that profile;
 - resident memory and CPU percentage for that profile's whole Chrome process tree;
 - host totals: RAM used vs. installed, CPU load, and core count;
 - the country ledger — every country in the pool, and which session holds it.
 
+During manual preparation, the monitor checks each active Surfshark extension
+about every 10 seconds without navigating its visible tab. A verified matching
+exit turns the profile row and ledger country green and shows **VPN connected**,
+the exit country, and public IP. An unconnected or wrong-country exit is flagged.
+
+The monitor is also the live admin control surface. Paste a new authorized URL
+and choose **Open in running + queued** to navigate all running profiles and set
+the target for every queued profile. In manual queue mode, **Promote next queued**
+opens exactly one waiting profile when a slot is available. Each row has a
+**Close** button that preserves its data and a **Reset** button that closes and
+deletes only that persistent profile.
+
 Per-profile memory and CPU come from one batched process query per refresh
 (`Get-CimInstance Win32_Process` on Windows, `ps` elsewhere). The browser process
-for each session is matched by its unique temporary-profile directory name, then
+for each session is matched by its unique persistent-profile directory name, then
 its whole child tree is summed — so the number covers the renderer, GPU, and
 utility processes, not just the browser process.
 
@@ -136,29 +138,26 @@ Surfshark extension do the routing inside each profile.
 
 ### One-time preparation
 
-1. Obtain the Surfshark Chrome extension as an **unpacked directory** — the folder
-   that directly contains its `manifest.json`.
-2. Enter that absolute path in the popup, along with the Surfshark account email
-   and password. The password is held in memory for the launch and is never
-   written to extension storage.
-3. Pick the country pool. **Auto-pick the minimum unique set** selects as many
-   countries as you have concurrent sessions.
+1. Leave **Unpacked Surfshark folder** blank and choose **Prepare profiles**.
+   Each new persistent profile opens as a blank Chrome window and stays open
+   until you close it. Manually visit Surfshark's official Chrome Web Store page
+   and select **Add to Chrome** once in that profile.
+2. Open Surfshark and choose **Log in with another device**. Scan the displayed
+   QR code with a device already logged in to Surfshark, or enter its temporary
+   login code from Surfshark's account settings. Then connect the profile to the
+   country shown in the fleet monitor and close it.
+3. Credentials are optional. The password is never written to extension storage.
+4. Pick one country per profile. **Auto-pick one country per profile** creates a
+   complete unique set and shows the numbered profile-to-country mapping.
 
 ### How countries are assigned
 
-`native-host/country-allocator.mjs` is the ledger. It reserves a country *before*
-Chrome starts, so two sessions launching in parallel can never be handed the same
-one, and releases it when that Chrome window closes so the next queued session can
-reuse it. Selection prefers a country nothing has used yet, then the least
-recently released one. Consequences worth knowing:
-
-- The pool must be at least as large as the concurrent session cap — the number of
-  sessions you can run at once, capped at 20 — not the whole run. Launch is
-  rejected up front if it is smaller.
-- With a pool at least as large as the whole run, every session gets a country no
-  other session in that run used.
-- With a run longer than the pool, countries are recycled as windows close, and a
-  country can appear more than once across the run — never at the same time.
+`native-host/country-allocator.mjs` remains the live ownership ledger, but it no
+longer chooses countries dynamically. The numbered slot mapping is stored in
+`personas.json` under the launcher's local data directory. Profile 3 therefore
+keeps the same country, locale, timezone, and viewport on every run. Resetting a
+profile deletes both its browser data and its saved persona assignment so it can
+be assigned afresh on the next launch.
 
 The catalogue lives in `native-host/countries.js` and is shared by the native host
 and the popup, so both always offer the same list. Surfshark changes its locations
@@ -198,10 +197,12 @@ Inspect the real popup with `chrome://extensions` → Surfshark → **service wo
 
 ### Known limits
 
-- Each session runs in a fresh temporary profile, so each one signs in to
-  Surfshark again. Many concurrent sign-ins can trigger rate limiting, a CAPTCHA,
-  or a device-verification prompt, none of which the driver can answer. Start with
-  a small session count.
+- Surfshark sessions can expire. If an automated launch finds a signed-out
+  profile and no credentials were supplied, it marks that open window as
+  **Needs attention**; sign in again there or prepare/reset that profile.
+- A connection or target-page error does not close a persistent Chrome window.
+  The monitor keeps it in the active count and shows **Needs attention** so you
+  can reconnect Surfshark or enter a URL manually.
 - Chrome restricts `--load-extension` in some recent and enterprise-managed
   builds. If sessions fail with a missing-popup error, confirm the extension
   actually loaded in one of the launched windows.
@@ -212,13 +213,12 @@ Inspect the real popup with `chrome://extensions` → Surfshark → **service wo
 
 Enable **Direct-connection dry run** to test the complete local workflow without
 entering proxy or VPN credentials. In this mode the proxy field is disabled, while
-separate Chrome processes, temporary profiles, viewport/screen settings,
-locale/timezone settings, the fleet monitor, queueing, and cleanup still operate
+separate Chrome processes, persistent profiles, viewport/screen settings,
+locale/timezone settings, the fleet monitor, and queueing still operate
 normally.
 
 All dry-run sessions use the computer's normal internet connection and therefore
-share its public IP. Disable dry-run mode and supply the full IPRoyal list, or
-enable VPN mode, when you are ready to test real routing.
+share its public IP. Enable VPN mode when you are ready to test Surfshark routing.
 
 The operating system may constrain the outer window dimensions to the physical
 display. The page viewport and `window.screen` values are configured independently

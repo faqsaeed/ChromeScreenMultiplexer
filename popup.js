@@ -1,16 +1,21 @@
-import { COUNTRY_CATALOGUE } from "./native-host/countries.js";
+import {
+  COUNTRY_CATALOGUE,
+  personaForCountry,
+} from "./native-host/countries.js";
 
 const MAX_ACTIVE_SESSIONS = 20;
 
 const form = document.querySelector("#launcher-form");
 const targetUrlInput = document.querySelector("#target-url");
 const countInput = document.querySelector("#session-count");
+const activeLimitInput = document.querySelector("#active-limit");
+const queueModeInput = document.querySelector("#queue-mode");
+const queueCount = document.querySelector("#queue-count");
 const environmentsInput = document.querySelector("#environments");
-const proxiesInput = document.querySelector("#proxies");
-const proxyField = document.querySelector("#proxy-field");
 const directModeInput = document.querySelector("#direct-mode");
 const authorizedInput = document.querySelector("#authorized");
-const launchButton = form.querySelector('button[type="submit"]');
+const launchButton = document.querySelector("#launch-sessions");
+const prepareButton = document.querySelector("#prepare-profiles");
 const stopButton = document.querySelector("#stop-all");
 const generateEnvironmentsButton = document.querySelector(
   "#generate-environments",
@@ -27,6 +32,7 @@ const countryGrid = document.querySelector("#country-grid");
 const countryCounter = document.querySelector("#country-counter");
 const autoPickButton = document.querySelector("#auto-pick");
 const clearCountriesButton = document.querySelector("#clear-countries");
+const personaPreview = document.querySelector("#persona-preview");
 
 const dashboardEnabledInput = document.querySelector("#dashboard-enabled");
 const dashboardCornerInput = document.querySelector("#dashboard-corner");
@@ -38,29 +44,6 @@ const fleetList = document.querySelector("#fleet-list");
 
 const selectedCountries = new Set();
 
-const ENVIRONMENT_PRESETS = [
-  "1366x768 | en-US | America/New_York",
-  "1440x900 | en-GB | Europe/London",
-  "1536x864 | en-SG | Asia/Singapore",
-  "1280x720 | en-CA | America/Toronto",
-  "1600x900 | en-AU | Australia/Sydney",
-  "1920x1080 | en-US | America/Chicago",
-  "1280x800 | de-DE | Europe/Berlin",
-  "1680x1050 | fr-FR | Europe/Paris",
-  "1024x768 | es-ES | Europe/Madrid",
-  "1280x1024 | it-IT | Europe/Rome",
-  "1440x960 | ja-JP | Asia/Tokyo",
-  "1600x1000 | ko-KR | Asia/Seoul",
-  "1360x768 | pt-BR | America/Sao_Paulo",
-  "1470x956 | en-NZ | Pacific/Auckland",
-  "1512x982 | nl-NL | Europe/Amsterdam",
-  "1728x1117 | sv-SE | Europe/Stockholm",
-  "1920x1200 | pl-PL | Europe/Warsaw",
-  "2048x1152 | en-IN | Asia/Kolkata",
-  "2560x1440 | ar-AE | Asia/Dubai",
-  "3840x2160 | en-ZA | Africa/Johannesburg",
-];
-
 const STATE_LABELS = {
   queued: "queued",
   launching: "launching",
@@ -70,6 +53,8 @@ const STATE_LABELS = {
   "ip-check": "IP check",
   navigating: "loading",
   running: "running",
+  setup: "manual VPN setup",
+  attention: "needs attention",
   failed: "failed",
   closed: "closed",
 };
@@ -106,7 +91,23 @@ function parseEnvironments(value) {
 
 function requiredCountryCount() {
   const count = Number.parseInt(countInput.value, 10) || 1;
-  return Math.min(count, MAX_ACTIVE_SESSIONS);
+  return count;
+}
+
+function chosenCountries() {
+  return COUNTRY_CATALOGUE.filter((country) => selectedCountries.has(country.code));
+}
+
+function syncQueueCounts() {
+  const count = Math.max(1, Number.parseInt(countInput.value, 10) || 1);
+  const maximum = Math.min(count, MAX_ACTIVE_SESSIONS);
+  activeLimitInput.max = String(maximum);
+  const active = Math.max(
+    1,
+    Math.min(maximum, Number.parseInt(activeLimitInput.value, 10) || maximum),
+  );
+  activeLimitInput.value = String(active);
+  queueCount.textContent = `${Math.max(0, count - active)} queued`;
 }
 
 function showStatus(status) {
@@ -114,6 +115,7 @@ function showStatus(status) {
   statusCard.className = `status ${kind}`;
   statusText.textContent = status?.message || "Ready.";
   launchButton.disabled = kind === "working";
+  prepareButton.disabled = kind === "working";
 }
 
 /* ------------------------------------------------------------------ *
@@ -154,16 +156,45 @@ function syncCountrySelection() {
   const short = selectedCountries.size < needed;
   countryCounter.textContent = `${selectedCountries.size} selected · ${needed} needed`;
   countryCounter.classList.toggle("short", short && vpnEnabledInput.checked);
+  personaPreview.replaceChildren(
+    ...chosenCountries().slice(0, needed).map((country, index) => {
+      const persona = personaForCountry(country.code, index);
+      const item = document.createElement("li");
+      item.textContent = `Profile ${index + 1}: ${country.name} · ${persona.locale} · ${persona.timezoneId} · ${persona.width}×${persona.height}`;
+      return item;
+    }),
+  );
+  syncQueueCounts();
 }
 
 function autoPickCountries() {
   const needed = requiredCountryCount();
+  selectedCountries.clear();
   for (const country of COUNTRY_CATALOGUE) {
     if (selectedCountries.size >= needed) {
       break;
     }
     selectedCountries.add(country.code);
   }
+  syncCountrySelection();
+}
+
+function generatePersonaRows() {
+  const count = Math.max(
+    1,
+    Math.min(COUNTRY_CATALOGUE.length, Number.parseInt(countInput.value, 10) || 1),
+  );
+  countInput.value = String(count);
+  if (selectedCountries.size < count) {
+    autoPickCountries();
+  }
+  const selected = chosenCountries().slice(0, count);
+  environmentsInput.value = selected
+    .map((country, index) => {
+      const persona = personaForCountry(country.code, index);
+      return `${persona.width}x${persona.height} | ${persona.locale} | ${persona.timezoneId}`;
+    })
+    .join("\n");
   syncCountrySelection();
 }
 
@@ -174,22 +205,15 @@ function autoPickCountries() {
 function syncModes() {
   const vpnMode = vpnEnabledInput.checked;
 
-  if (vpnMode) {
-    // VPN routing happens inside the profile, so Playwright must connect
-    // directly; stacking an IPRoyal proxy on top would double-route.
-    directModeInput.checked = true;
-  }
-  directModeInput.disabled = vpnMode;
-
-  const directMode = directModeInput.checked;
-  proxiesInput.disabled = directMode;
-  proxiesInput.required = !directMode;
-  proxyField.classList.toggle("disabled", directMode);
+  // Surfshark routes inside the profile. With Surfshark off, the supported
+  // fallback is a direct dry run; the old paid-per-GB proxy UI is retired.
+  directModeInput.checked = true;
+  directModeInput.disabled = true;
 
   vpnDetails.hidden = !vpnMode;
-  vpnPathInput.required = vpnMode;
-  vpnUsernameInput.required = vpnMode;
-  vpnPasswordInput.required = vpnMode;
+  vpnPathInput.required = false;
+  vpnUsernameInput.required = false;
+  vpnPasswordInput.required = false;
 
   syncCountrySelection();
 }
@@ -213,11 +237,15 @@ function renderFleet(snapshot) {
   fleetList.replaceChildren(
     ...snapshot.sessions.map((session) => {
       const item = document.createElement("li");
-      item.className = `fleet-row ${session.state}`;
+      item.className = `fleet-row ${
+        session.vpnCheck === "connected" ? "running" : session.state
+      }`;
 
       const label = session.country ? session.country.code : "··";
       const detail = [
-        STATE_LABELS[session.state] || session.state,
+        session.vpnCheck === "connected"
+          ? "VPN connected"
+          : STATE_LABELS[session.state] || session.state,
         session.ip,
         Number.isFinite(session.rssBytes)
           ? `${Math.round(session.rssBytes / 1024 / 1024)} MB`
@@ -252,6 +280,8 @@ async function restorePreferences() {
   if (preferences) {
     targetUrlInput.value = preferences.targetUrl || targetUrlInput.value;
     countInput.value = preferences.count || countInput.value;
+    activeLimitInput.value = preferences.activeLimit || activeLimitInput.value;
+    queueModeInput.value = preferences.queueMode || "manual";
     environmentsInput.value =
       preferences.environmentsText || environmentsInput.value;
     directModeInput.checked = preferences.directMode === true;
@@ -265,6 +295,9 @@ async function restorePreferences() {
     for (const code of preferences.countries || []) {
       selectedCountries.add(code);
     }
+  } else {
+    autoPickCountries();
+    generatePersonaRows();
   }
 
   syncModes();
@@ -283,6 +316,7 @@ async function restorePreferences() {
 
 form.addEventListener("submit", async (event) => {
   event.preventDefault();
+  const prepareOnly = event.submitter?.id === "prepare-profiles";
 
   try {
     const targetUrl = new URL(targetUrlInput.value);
@@ -291,23 +325,36 @@ form.addEventListener("submit", async (event) => {
     }
 
     const count = Number(countInput.value);
-    if (!Number.isInteger(count) || count < 1 || count > 100) {
-      throw new Error("Session count must be between 1 and 100.");
+    if (!Number.isInteger(count) || count < 1 || count > COUNTRY_CATALOGUE.length) {
+      throw new Error(`Persistent profile count must be between 1 and ${COUNTRY_CATALOGUE.length}.`);
+    }
+
+    const activeLimit = Number(activeLimitInput.value);
+    if (
+      !Number.isInteger(activeLimit) ||
+      activeLimit < 1 ||
+      activeLimit > Math.min(count, MAX_ACTIVE_SESSIONS)
+    ) {
+      throw new Error(`Open initially must be between 1 and ${Math.min(count, MAX_ACTIVE_SESSIONS)}.`);
+    }
+
+    if (prepareOnly) {
+      vpnEnabledInput.checked = true;
+      vpnPathInput.value = "";
+      syncModes();
+      if (selectedCountries.size < count) {
+        autoPickCountries();
+      }
+      generatePersonaRows();
     }
 
     const environments = parseEnvironments(environmentsInput.value);
     const vpnEnabled = vpnEnabledInput.checked;
     const directMode = vpnEnabled || directModeInput.checked;
-    const proxyLines = directMode ? [] : nonEmptyLines(proxiesInput.value);
+    const proxyLines = [];
 
     if (environments.length !== count) {
       throw new Error(`Enter exactly ${count} test environment rows.`);
-    }
-    if (!directMode && proxyLines.length !== count) {
-      throw new Error(`Enter exactly ${count} IPRoyal proxy rows.`);
-    }
-    if (!directMode && new Set(proxyLines).size !== proxyLines.length) {
-      throw new Error("Every proxy row must be unique.");
     }
     const dimensions = environments.map(
       ({ width, height }) => `${width}x${height}`,
@@ -316,30 +363,32 @@ form.addEventListener("submit", async (event) => {
       throw new Error("Every session must use different screen dimensions.");
     }
 
-    const countries = [...selectedCountries];
+    const countries = chosenCountries()
+      .slice(0, count)
+      .map((country) => country.code);
     let vpn;
     if (vpnEnabled) {
-      const needed = Math.min(count, MAX_ACTIVE_SESSIONS);
-      if (!vpnPathInput.value.trim()) {
-        throw new Error("Enter the unpacked Surfshark extension folder.");
-      }
-      if (!vpnUsernameInput.value.trim() || !vpnPasswordInput.value) {
-        throw new Error("Enter the Surfshark account email and password.");
+      const needed = count;
+      if (Boolean(vpnUsernameInput.value.trim()) !== Boolean(vpnPasswordInput.value)) {
+        throw new Error("Provide both the Surfshark email and password, or leave both blank to use saved logins.");
       }
       if (countries.length < needed) {
         throw new Error(
-          `Select at least ${needed} countries so every open profile gets a unique one. ${countries.length} selected.`,
+          `Select ${needed} countries so every persistent profile has a fixed persona. ${countries.length} selected.`,
         );
       }
 
       vpn = {
         enabled: true,
         provider: "surfshark",
-        extensionPath: vpnPathInput.value.trim(),
+        extensionPath: prepareOnly ? "" : vpnPathInput.value.trim(),
         username: vpnUsernameInput.value.trim(),
         password: vpnPasswordInput.value,
         countries,
       };
+    }
+    if (prepareOnly && !vpnEnabled) {
+      throw new Error("Prepare profiles is available in Surfshark VPN mode.");
     }
 
     if (!authorizedInput.checked) {
@@ -350,6 +399,8 @@ form.addEventListener("submit", async (event) => {
       preferences: {
         targetUrl: targetUrl.href,
         count,
+        activeLimit,
+        queueMode: queueModeInput.value,
         environmentsText: environmentsInput.value,
         directMode: directModeInput.checked,
         vpnEnabled,
@@ -362,12 +413,20 @@ form.addEventListener("submit", async (event) => {
       },
     });
 
-    showStatus({ kind: "working", message: "Sending launch request…" });
+    showStatus({
+      kind: "working",
+      message: prepareOnly
+        ? "Opening persistent profiles for one-time Surfshark setup…"
+        : "Sending launch request…",
+    });
     const response = await chrome.runtime.sendMessage({
       type: "launcher.launch",
       payload: {
         targetUrl: targetUrl.href,
         count,
+        activeLimit,
+        queueMode: queueModeInput.value,
+        prepareOnly,
         environments,
         proxyLines,
         directMode,
@@ -385,40 +444,24 @@ form.addEventListener("submit", async (event) => {
       throw new Error(response?.error || "The launch request failed.");
     }
 
-    proxiesInput.value = "";
     vpnPasswordInput.value = "";
   } catch (error) {
     showStatus({ kind: "error", message: error.message });
   }
 });
 
-generateEnvironmentsButton.addEventListener("click", () => {
-  const count = Math.max(
-    1,
-    Math.min(100, Number.parseInt(countInput.value, 10) || 1),
-  );
-  countInput.value = String(count);
-
-  const generated = [];
-  for (let i = 0; i < count; i++) {
-    if (i < ENVIRONMENT_PRESETS.length) {
-      generated.push(ENVIRONMENT_PRESETS[i]);
-    } else {
-      const width = 1000 + i * 10;
-      const height = 700 + i * 5;
-      generated.push(`${width}x${height} | en-US | America/New_York`);
-    }
-  }
-  environmentsInput.value = generated.join("\n");
-  syncCountrySelection();
-});
+generateEnvironmentsButton.addEventListener("click", generatePersonaRows);
 
 autoPickButton.addEventListener("click", autoPickCountries);
 clearCountriesButton.addEventListener("click", () => {
   selectedCountries.clear();
   syncCountrySelection();
 });
-countInput.addEventListener("input", syncCountrySelection);
+countInput.addEventListener("input", () => {
+  syncCountrySelection();
+  syncQueueCounts();
+});
+activeLimitInput.addEventListener("input", syncQueueCounts);
 vpnEnabledInput.addEventListener("change", syncModes);
 directModeInput.addEventListener("change", syncModes);
 

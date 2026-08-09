@@ -44,9 +44,9 @@ function describeNativeMessage(message) {
     case "accepted":
       return {
         kind: "working",
-        message: `Launching ${message.count} authorized test session${
+        message: `${message.prepareOnly ? "Preparing" : "Launching"} ${message.count} authorized test session${
           message.count === 1 ? "" : "s"
-        } in ${describeMode(message)} mode, with up to ${
+        } in ${describeMode(message)} mode, with ${message.queueMode || "auto"} queue control and up to ${
           message.maxActive
         } active at once…`,
       };

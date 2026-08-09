@@ -7,8 +7,8 @@ import { chromium } from "playwright-core";
 const moduleDir = path.dirname(fileURLToPath(import.meta.url));
 const DASHBOARD_FILE = path.join(moduleDir, "dashboard", "index.html");
 const DASHBOARD_TITLE = "Chrome QA Fleet Monitor";
-const WIDTH = 470;
-const HEIGHT = 660;
+const WIDTH = 560;
+const HEIGHT = 760;
 const MARGIN = 14;
 
 /**
@@ -102,6 +102,7 @@ export async function openFleetDashboard(options) {
   const context = await chromium.launchPersistentContext(profileDir, {
     channel: "chrome",
     headless: false,
+    ignoreDefaultArgs: ["--no-sandbox"],
     viewport: null,
     args: [
       `--app=${dashboardUrl}`,
@@ -115,6 +116,16 @@ export async function openFleetDashboard(options) {
   if (!page) {
     await context.close().catch(() => {});
     throw new Error("The fleet dashboard window did not open.");
+  }
+
+  if (typeof options.onCommand === "function") {
+    await page.exposeFunction("__fleetCommand", async (command) => {
+      try {
+        return { ok: true, result: await options.onCommand(command) };
+      } catch (error) {
+        return { ok: false, error: error.message };
+      }
+    });
   }
 
   // --app opens the monitor in its own window; Chrome may also restore a blank

@@ -1,7 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import {
-  MAX_ACTIVE_SESSIONS,
   parseProxyLine,
   requiredCountryCount,
   validateDashboardConfig,
@@ -267,6 +266,9 @@ test("accepts a Surfshark VPN launch with one country per session", () => {
   assert.equal(result.vpn.provider, "surfshark");
   assert.deepEqual(result.vpn.countries, ["DE", "JP"]);
   assert.equal(result.vpn.password, "secret");
+  assert.equal(result.environments[0].locale, "de-DE");
+  assert.equal(result.environments[0].timezoneId, "Europe/Berlin");
+  assert.equal(result.environments[1].locale, "ja-JP");
 });
 
 test("VPN mode cannot be stacked on IPRoyal proxies", () => {
@@ -285,10 +287,10 @@ test("VPN mode cannot be stacked on IPRoyal proxies", () => {
   );
 });
 
-test("rejects a country pool smaller than the concurrent session count", () => {
+test("rejects a country pool smaller than the persistent profile count", () => {
   assert.throws(
     () => validateLaunchPayload(vpnPayload({ vpn: { countries: ["DE"] } })),
-    /Select at least 2 VPN countries/,
+    /Select exactly 2 VPN countries/,
   );
 });
 
@@ -323,20 +325,24 @@ test("fills the country pool from the catalogue when none is chosen", () => {
   assert.equal(new Set(result.vpn.countries).size, 3);
 });
 
-test("VPN mode requires the extension folder and account credentials", () => {
-  assert.throws(
-    () => validateLaunchPayload(vpnPayload({ vpn: { extensionPath: "  " } })),
-    /path to the unpacked Surfshark extension/,
+test("VPN mode accepts Web Store installation and a saved profile login", () => {
+  const webStoreInstall = validateLaunchPayload(
+    vpnPayload({ vpn: { extensionPath: "", username: "", password: "" } }),
   );
+  assert.equal(webStoreInstall.vpn.extensionPath, "");
   assert.throws(
     () => validateLaunchPayload(vpnPayload({ vpn: { password: "" } })),
-    /Surfshark account email and password/,
+    /Provide both the Surfshark email and password/,
   );
+  const savedLogin = validateLaunchPayload(
+    vpnPayload({ vpn: { username: "", password: "" } }),
+  );
+  assert.equal(savedLogin.vpn.username, "");
 });
 
-test("a run longer than the active cap only needs one country per live profile", () => {
+test("fixed VPN personas require one country per persistent profile", () => {
   assert.equal(requiredCountryCount(4), 4);
-  assert.equal(requiredCountryCount(100), MAX_ACTIVE_SESSIONS);
+  assert.equal(requiredCountryCount(40), 40);
 
   const count = 40;
   const result = validateLaunchPayload({
@@ -355,7 +361,26 @@ test("a run longer than the active cap only needs one country per live profile",
     },
   });
 
-  assert.equal(result.vpn.countries.length, MAX_ACTIVE_SESSIONS);
+  assert.equal(result.vpn.countries.length, count);
+});
+
+test("validates configurable active limit and manual queue control", () => {
+  const result = validateLaunchPayload({
+    authorized: true,
+    directMode: true,
+    targetUrl: "https://staging.example.com",
+    count: 4,
+    activeLimit: 2,
+    queueMode: "manual",
+    environments: environments(4),
+    proxyLines: [],
+  });
+  assert.equal(result.activeLimit, 2);
+  assert.equal(result.queueMode, "manual");
+  assert.throws(
+    () => validateLaunchPayload({ ...result, authorized: true, activeLimit: 21, proxyLines: [] }),
+    /Initial active count/,
+  );
 });
 
 test("leaves VPN configuration null when the feature is off", () => {

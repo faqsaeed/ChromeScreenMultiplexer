@@ -142,18 +142,23 @@ textarea:focus {
   font-weight: 750;
 }
 
-#proxy-field.disabled {
-  opacity: 0.48;
-}
-
-#proxy-field.disabled textarea {
-  cursor: not-allowed;
-}
-
 .actions {
   display: grid;
-  grid-template-columns: 1fr auto;
+  grid-template-columns: 1fr 1fr auto;
   gap: 9px;
+}
+
+.persona-preview {
+  display: grid;
+  gap: 3px;
+  max-height: 112px;
+  overflow-y: auto;
+  margin: 2px 0 0;
+  padding: 0 0 0 22px;
+  color: #89958b;
+  font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+  font-size: 9px;
+  line-height: 1.4;
 }
 
 button {

@@ -1,4 +1,8 @@
-import { defaultCountryPool, isKnownCountry } from "./countries.js";
+import {
+  defaultCountryPool,
+  isKnownCountry,
+  personaForCountry,
+} from "./countries.js";
 
 const MAX_SESSIONS = 100;
 const MIN_WIDTH = 320;
@@ -101,14 +105,11 @@ function validateEnvironment(environment, index) {
   return { width, height, locale, timezoneId };
 }
 
-/**
- * The country pool only has to cover the sessions that can be open at the same
- * time: a country is released when its session closes and the next queued
- * session reuses it. A pool at least as large as the whole run additionally
- * gives every session in that run a country nothing else used.
- */
+/** A fixed persona needs one unique country for every persistent profile slot. */
 export function requiredCountryCount(sessionCount) {
-  return Math.min(sessionCount, MAX_ACTIVE_SESSIONS);
+  // Countries are personas now, not recyclable runtime resources. Requiring a
+  // country for every slot keeps profile N stable across every launch.
+  return sessionCount;
 }
 
 export function validateVpnConfig(vpn, count, directMode) {
@@ -128,16 +129,12 @@ export function validateVpnConfig(vpn, count, directMode) {
   );
 
   const extensionPath = String(vpn.extensionPath || "").trim();
-  assert(
-    extensionPath,
-    "VPN mode needs the path to the unpacked Surfshark extension directory.",
-  );
 
   const username = String(vpn.username || "").trim();
   const password = String(vpn.password || "");
   assert(
-    username && password,
-    "VPN mode needs the Surfshark account email and password.",
+    Boolean(username) === Boolean(password),
+    "Provide both the Surfshark email and password, or leave both blank to use the saved profile login.",
   );
 
   const needed = requiredCountryCount(count);
@@ -158,8 +155,8 @@ export function validateVpnConfig(vpn, count, directMode) {
     "The VPN country list contains a duplicate country.",
   );
   assert(
-    countries.length >= needed,
-    `Select at least ${needed} VPN countries so every simultaneously open Chrome profile gets a different one. ${countries.length} selected.`,
+    countries.length === needed,
+    `Select exactly ${needed} VPN countries so every persistent profile gets one fixed country. ${countries.length} selected.`,
   );
 
   return {
@@ -207,6 +204,20 @@ export function validateLaunchPayload(payload) {
   assert(
     Number.isInteger(count) && count >= 1 && count <= MAX_SESSIONS,
     `Session count must be between 1 and ${MAX_SESSIONS}.`,
+  );
+
+  const activeLimit = Number(payload.activeLimit ?? Math.min(count, MAX_ACTIVE_SESSIONS));
+  assert(
+    Number.isInteger(activeLimit) &&
+      activeLimit >= 1 &&
+      activeLimit <= Math.min(count, MAX_ACTIVE_SESSIONS),
+    `Initial active count must be between 1 and ${Math.min(count, MAX_ACTIVE_SESSIONS)}.`,
+  );
+
+  const queueMode = String(payload.queueMode || "auto").toLowerCase();
+  assert(
+    ["auto", "manual"].includes(queueMode),
+    'Queue mode must be "auto" or "manual".',
   );
 
   const target = new URL(String(payload.targetUrl || ""));
@@ -265,14 +276,28 @@ export function validateLaunchPayload(payload) {
 
   const vpn = validateVpnConfig(payload.vpn, count, directMode);
   const dashboard = validateDashboardConfig(payload.dashboard);
+  const boundEnvironments = vpn
+    ? vpn.countries.map((code, index) => {
+        const persona = personaForCountry(code, index);
+        return {
+          width: persona.width,
+          height: persona.height,
+          locale: persona.locale,
+          timezoneId: persona.timezoneId,
+        };
+      })
+    : environments;
 
   return {
     targetUrl: target.href,
     count,
-    environments,
+    environments: boundEnvironments,
     proxies,
     directMode,
     vpn,
     dashboard,
+    activeLimit,
+    queueMode,
+    prepareOnly: payload.prepareOnly === true,
   };
 }

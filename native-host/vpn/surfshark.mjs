@@ -12,6 +12,10 @@ const LOCAL_SELECTORS_FILE = path.join(
 
 let cachedSelectors = null;
 
+export const SURFSHARK_EXTENSION_ID = "ailoabdmgclmfmhdagmlohpjlbpffblp";
+export const SURFSHARK_WEBSTORE_URL =
+  `https://chromewebstore.google.com/detail/surfshark-vpn-extension/${SURFSHARK_EXTENSION_ID}`;
+
 async function readJson(file) {
   try {
     return JSON.parse(await fs.readFile(file, "utf8"));
@@ -113,7 +117,13 @@ async function requireVisible(page, step, candidates, timeoutMs) {
   return page.locator(selector).first();
 }
 
-async function openPopup(context, extensionId, candidatePaths, anchors) {
+async function openPopup(
+  context,
+  extensionId,
+  candidatePaths,
+  anchors,
+  anchorTimeoutMs = 8000,
+) {
   const tried = [];
   const page = await context.newPage();
 
@@ -130,7 +140,13 @@ async function openPopup(context, extensionId, candidatePaths, anchors) {
       continue;
     }
 
-    if (await firstVisible(page, anchors, 8000)) {
+    const isRealExtensionPage = await page
+      .evaluate(
+        (expectedId) => globalThis.chrome?.runtime?.id === expectedId,
+        extensionId,
+      )
+      .catch(() => false);
+    if (isRealExtensionPage || (await firstVisible(page, anchors, anchorTimeoutMs))) {
       return { page, url };
     }
   }
@@ -141,11 +157,35 @@ async function openPopup(context, extensionId, candidatePaths, anchors) {
   );
 }
 
+async function waitForInstalledExtension(context, extensionId, timeoutMs = 60_000) {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    const worker = context
+      .serviceWorkers()
+      .find((candidate) =>
+        candidate.url().startsWith(`chrome-extension://${extensionId}/`),
+      );
+    if (worker) {
+      return worker;
+    }
+    await context
+      .waitForEvent("serviceworker", { timeout: 1000 })
+      .catch(() => null);
+  }
+  return null;
+}
+
 async function signIn(page, steps, username, password, onProgress) {
   const emailSelector = await firstVisible(page, steps.emailInput, 2000);
   if (!emailSelector) {
     onProgress?.("Surfshark session already signed in.");
     return false;
+  }
+
+  if (!username || !password) {
+    throw new Error(
+      "This persistent profile is signed out of Surfshark. Use Prepare profiles to sign in once, or provide the account email and password for this launch.",
+    );
   }
 
   onProgress?.("Signing in to Surfshark…");
@@ -178,6 +218,80 @@ async function signIn(page, steps, username, password, onProgress) {
   }
 
   return true;
+}
+
+async function extensionPopup(context, extensionPath) {
+  const selectors = await loadSelectors();
+  let manifest = null;
+  let extensionId = SURFSHARK_EXTENSION_ID;
+  let extensionIdSource = "web-store-profile";
+  if (extensionPath) {
+    manifest = await readExtensionManifest(extensionPath);
+    const resolved = await resolveExtensionId(context, manifest, extensionPath);
+    extensionId = resolved.id;
+    extensionIdSource = resolved.source;
+  } else {
+    const worker = await waitForInstalledExtension(context, extensionId);
+    if (!worker) {
+      throw new Error(
+        "Surfshark files exist but Chrome did not start the extension within 60 seconds. Open the profile with Prepare profiles and confirm Surfshark is enabled in chrome://extensions.",
+      );
+    }
+  }
+  const declaredPopup =
+    manifest?.action?.default_popup || manifest?.browser_action?.default_popup;
+  const candidatePaths = [
+    ...(declaredPopup ? [declaredPopup] : []),
+    ...(!extensionPath ? ["index.html"] : []),
+    ...selectors.popupPaths,
+  ].filter((value, index, all) => all.indexOf(value) === index);
+  const anchors = [
+    ...selectors.steps.signedInIndicator,
+    ...selectors.steps.emailInput,
+  ];
+  let opened;
+  try {
+    opened = await openPopup(
+      context,
+      extensionId,
+      candidatePaths,
+      anchors,
+      extensionPath ? 8000 : 1000,
+    );
+  } catch (error) {
+    if (!extensionPath) {
+      throw new Error(
+        `Surfshark is installed but its popup could not be opened. ${error.message}`,
+      );
+    }
+    throw error;
+  }
+  return { ...opened, selectors, extensionId, extensionIdSource };
+}
+
+/** Opens Surfshark and leaves it visible for the one-time manual profile setup. */
+export async function prepareSurfsharkProfile(options) {
+  let opened;
+  try {
+    opened = await extensionPopup(options.context, options.extensionPath);
+  } catch (error) {
+    if (options.extensionPath) {
+      throw error;
+    }
+    const page = options.context.pages()[0] || (await options.context.newPage());
+    await page.goto(SURFSHARK_WEBSTORE_URL, {
+      waitUntil: "domcontentloaded",
+      timeout: 45_000,
+    });
+    options.onProgress?.(
+      `Install Surfshark from the Chrome Web Store, open it, sign in by QR or login code, and connect this profile to ${options.country.name}.`,
+    );
+    return { page, popupUrl: SURFSHARK_WEBSTORE_URL, installationRequired: true };
+  }
+  options.onProgress?.(
+    `Surfshark is open. Sign in by QR or login code and connect this profile to ${options.country.name}, then close the Chrome window.`,
+  );
+  return { page: opened.page, popupUrl: opened.url };
 }
 
 async function selectCountry(page, steps, country, onProgress) {
@@ -218,27 +332,9 @@ export async function connectSurfshark(options) {
     connectTimeoutMs = 120_000,
   } = options;
 
-  const selectors = await loadSelectors();
-  const steps = selectors.steps;
-  const manifest = await readExtensionManifest(extensionPath);
-
-  const { id: extensionId, source: extensionIdSource } =
-    await resolveExtensionId(context, manifest, extensionPath);
-
-  const declaredPopup =
-    manifest?.action?.default_popup || manifest?.browser_action?.default_popup;
-  const candidatePaths = [
-    ...(declaredPopup ? [declaredPopup] : []),
-    ...selectors.popupPaths,
-  ].filter((value, index, all) => all.indexOf(value) === index);
-
-  const anchors = [...steps.signedInIndicator, ...steps.emailInput];
-  const { page, url } = await openPopup(
-    context,
-    extensionId,
-    candidatePaths,
-    anchors,
-  );
+  const opened = await extensionPopup(context, extensionPath);
+  const steps = opened.selectors.steps;
+  const { page, url, extensionId, extensionIdSource } = opened;
 
   try {
     await signIn(page, steps, username, password, onProgress);

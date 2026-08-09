@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
   "name": "Authorized Chrome QA Launcher",
-  "description": "Launch isolated Chrome test sessions with explicit proxy and display configurations.",
-  "version": "0.1.0",
+  "description": "Launch persistent, country-bound Chrome QA profiles through Surfshark.",
+  "version": "0.2.0",
   "minimum_chrome_version": "105",
   "permissions": [
     "nativeMessaging",

@@ -10,6 +10,16 @@ test("never hands the same country to two live sessions", () => {
   assert.equal(allocator.availableCount, 0);
 });
 
+test("reserves the country assigned to a fixed profile", () => {
+  const allocator = new CountryAllocator(["DE", "JP"]);
+  assert.equal(allocator.claimCode("JP", "profile-2").code, "JP");
+  assert.equal(allocator.holderOf("JP"), "profile-2");
+  assert.throws(
+    () => allocator.claimCode("JP", "profile-1"),
+    /already held by another running profile/,
+  );
+});
+
 test("throws instead of duplicating when the pool is exhausted", () => {
   const allocator = new CountryAllocator(["DE"]);
   allocator.claim("a");

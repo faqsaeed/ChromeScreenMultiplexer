@@ -31,7 +31,7 @@
         font-size: 12px;
         height: 100vh;
         display: grid;
-        grid-template-rows: auto auto 1fr auto auto;
+        grid-template-rows: auto auto auto 1fr auto auto;
       }
 
       header {
@@ -87,6 +87,43 @@
         border-bottom: 1px solid var(--line);
       }
 
+      .controls {
+        display: grid;
+        gap: 7px;
+        padding: 9px 12px;
+        border-bottom: 1px solid var(--line);
+        background: var(--panel);
+      }
+
+      .target-row {
+        display: grid;
+        grid-template-columns: 1fr auto;
+        gap: 6px;
+      }
+
+      .queue-row {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+      }
+
+      input, button {
+        min-width: 0;
+        border: 1px solid var(--line);
+        border-radius: 6px;
+        background: #101612;
+        color: var(--text);
+        font: 10px var(--mono);
+      }
+
+      input { padding: 7px 8px; }
+      button { padding: 6px 9px; cursor: pointer; }
+      button:hover { border-color: var(--green); }
+      button:disabled { opacity: .45; cursor: default; }
+      button.danger { margin-left: auto; color: var(--red); }
+      .control-status { color: var(--dim); font: 9px var(--mono); min-height: 11px; }
+      .control-status.error { color: var(--red); }
+
       .meter-label {
         display: flex;
         justify-content: space-between;
@@ -130,7 +167,7 @@
 
       .row {
         display: grid;
-        grid-template-columns: 22px 1fr auto;
+        grid-template-columns: 22px 1fr auto auto;
         gap: 8px;
         align-items: start;
         padding: 7px 12px;
@@ -252,6 +289,15 @@
         font-size: 9px;
       }
 
+      .reset {
+        padding: 3px 5px;
+        color: var(--dim);
+        font-size: 9px;
+      }
+
+      .row-actions { display: flex; gap: 3px; }
+      .close-profile { padding: 3px 5px; color: var(--muted); font-size: 9px; }
+
       .empty {
         padding: 28px 16px;
         text-align: center;
@@ -290,6 +336,13 @@
       }
 
       .chip.used {
+        border-color: #35566a;
+        color: var(--blue);
+        background: rgb(111 184 224 / 8%);
+        font-weight: 700;
+      }
+
+      .chip.connected {
         border-color: #2f4a39;
         color: #0e1f15;
         background: var(--green);
@@ -333,6 +386,19 @@
       </div>
     </section>
 
+    <section class="controls">
+      <div class="target-row">
+        <input id="target-url" type="url" placeholder="https://authorized-target.example" />
+        <button id="navigate-all" type="button">Open in running + queued</button>
+      </div>
+      <div class="queue-row">
+        <button id="promote-next" type="button">Promote next queued</button>
+        <span id="queue-mode" class="control-status"></span>
+        <button id="stop-all" class="danger" type="button">Stop all</button>
+      </div>
+      <div id="control-status" class="control-status">Dashboard controls ready.</div>
+    </section>
+
     <section id="sessions">
       <p class="empty">Waiting for the launcher…</p>
     </section>
@@ -357,6 +423,8 @@
         "ip-check": { dot: "working", label: "Checking exit IP" },
         navigating: { dot: "working", label: "Loading target" },
         running: { dot: "running", label: "Running" },
+        setup: { dot: "vpn", label: "Manual VPN setup" },
+        attention: { dot: "failed", label: "Needs attention" },
         failed: { dot: "failed", label: "Failed" },
         closed: { dot: "queued", label: "Closed" },
       };
@@ -394,12 +462,26 @@
       }
 
       function renderSession(session) {
-        const meta = STATES[session.state] || { dot: "queued", label: session.state };
         const country = session.country;
         const mismatch = session.geoOk === false;
+        const connected = session.vpnCheck === "connected" && session.geoOk === true;
+        const meta = connected
+          ? { dot: "running", label: "VPN connected" }
+          : STATES[session.state] || { dot: "queued", label: session.state };
         const ccClass = country ? (mismatch ? "cc mismatch" : "cc") : "cc unset";
         const cc = country ? country.code : "··";
-        const title = country ? country.name : session.vpnEnabled ? "Awaiting country" : "Direct";
+        const title = country
+          ? country.name + (connected ? " · VPN connected" : "")
+          : session.vpnEnabled ? "Awaiting country" : "Direct";
+
+        const statusDetail = session.vpnCheck === "checking"
+          ? "Checking VPN exit…"
+          : connected
+            ? ["VPN connected", session.ip, session.ipCountry && "exit " + session.ipCountry]
+                .filter(Boolean).join(" · ")
+            : session.vpnCheck === "not-installed"
+              ? "Surfshark not detected yet · manual setup"
+              : session.ip || meta.label;
 
         const fault = session.error || session.warning;
         const detail = fault
@@ -409,7 +491,7 @@
           : '<div class="line2">' +
             escapeHtml(
               [
-                session.ip || meta.label,
+                statusDetail,
                 session.ipCountry && country && session.ipCountry !== country.code
                   ? "exit " + session.ipCountry
                   : session.city,
@@ -433,9 +515,61 @@
           "<small>" +
           (Number.isFinite(session.cpuPercent) ? session.cpuPercent.toFixed(1) + "% cpu" : "—") +
           "</small></div>" +
+          '<div class="row-actions">' +
+          (session.state !== "queued" && session.state !== "closed" && session.state !== "failed"
+            ? '<button class="close-profile" data-close="' + session.index + '" title="Close and keep this profile">Close</button>'
+            : "") +
+          '<button class="reset" data-reset="' + session.index + '" title="Delete this saved profile">Reset</button>' +
+          "</div>" +
           "</div>"
         );
       }
+
+      async function command(payload, workingText) {
+        const status = document.getElementById("control-status");
+        status.className = "control-status";
+        status.textContent = workingText;
+        if (typeof window.__fleetCommand !== "function") {
+          status.className = "control-status error";
+          status.textContent = "Dashboard command bridge is unavailable.";
+          return null;
+        }
+        const response = await window.__fleetCommand(payload);
+        status.className = "control-status" + (response.ok ? "" : " error");
+        status.textContent = response.ok ? "Done." : response.error;
+        return response;
+      }
+
+      document.getElementById("navigate-all").addEventListener("click", () => {
+        void command(
+          { action: "navigate", url: document.getElementById("target-url").value },
+          "Updating target and navigating running profiles…",
+        );
+      });
+      document.getElementById("promote-next").addEventListener("click", () => {
+        void command({ action: "promoteNext" }, "Promoting the next profile…");
+      });
+      document.getElementById("stop-all").addEventListener("click", () => {
+        if (confirm("Close every launched Chrome and cancel the queue?")) {
+          void command({ action: "stopAll" }, "Stopping all profiles…");
+        }
+      });
+      document.getElementById("sessions").addEventListener("click", (event) => {
+        const closeButton = event.target.closest("[data-close]");
+        if (closeButton) {
+          void command(
+            { action: "closeProfile", index: Number(closeButton.dataset.close) },
+            "Closing profile " + closeButton.dataset.close + "…",
+          );
+          return;
+        }
+        const button = event.target.closest("[data-reset]");
+        if (!button) return;
+        const index = Number(button.dataset.reset);
+        if (confirm("Reset persistent profile " + index + "? Its cookies, login and cache will be deleted.")) {
+          void command({ action: "resetProfile", index }, "Resetting profile " + index + "…");
+        }
+      });
 
       window.__fleetUpdate = function (snapshot) {
         const run = snapshot.run || {};
@@ -443,6 +577,15 @@
           pill("ACTIVE", run.active ?? 0) +
           pill("QUEUED", run.queued ?? 0) +
           (run.failed ? pill("FAILED", run.failed, true) : "");
+        const targetInput = document.getElementById("target-url");
+        if (document.activeElement !== targetInput && run.targetUrl) {
+          targetInput.value = run.targetUrl;
+        }
+        document.getElementById("promote-next").disabled =
+          !run.queued || run.queueMode !== "manual" || run.active >= run.activeLimit;
+        document.getElementById("queue-mode").textContent =
+          (run.queueMode === "manual" ? "MANUAL" : "AUTO") +
+          " QUEUE · LIMIT " + (run.activeLimit ?? 20);
 
         const host = snapshot.host || {};
         if (Number.isFinite(host.totalBytes) && host.totalBytes > 0) {
@@ -470,15 +613,17 @@
         const countries = snapshot.countries || [];
         document.getElementById("tally-heading").textContent =
           "VPN COUNTRY LEDGER · " +
-          countries.filter((c) => c.inUse).length + " HELD / " + countries.length;
+          countries.filter((c) => c.connected).length + " CONNECTED · " +
+          countries.filter((c) => c.inUse).length + " OPEN / " + countries.length;
         document.getElementById("chips").innerHTML = countries.length
           ? countries
               .map(
                 (c) =>
                   '<span class="chip ' +
-                  (c.inUse ? "used" : c.useCount > 0 ? "spent" : "") +
+                  (c.connected ? "connected" : c.inUse ? "used" : c.useCount > 0 ? "spent" : "") +
                   '" title="' + escapeHtml(c.name) +
-                  (c.holder ? " → " + escapeHtml(c.holder) : "") + '">' +
+                  (c.holder ? " → " + escapeHtml(c.holder) : "") +
+                  (c.ip ? " · " + escapeHtml(c.ip) : "") + '">' +
                   escapeHtml(c.code) + "</span>",
               )
               .join("")

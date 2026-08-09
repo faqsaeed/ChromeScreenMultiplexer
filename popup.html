@@ -30,27 +30,34 @@
           />
         </label>
 
-        <label class="count-field">
-          <span>Session count</span>
-          <input
-            id="session-count"
-            name="count"
-            type="number"
-            min="1"
-            max="100"
-            value="3"
-            required
-          />
+        <div class="pair">
+          <label>
+            <span>Persistent profiles</span>
+            <input id="session-count" name="count" type="number" min="1" max="66" value="24" required />
+          </label>
+          <label>
+            <span>Open initially</span>
+            <small id="queue-count">4 queued</small>
+            <input id="active-limit" type="number" min="1" max="20" value="20" required />
+          </label>
+        </div>
+
+        <label>
+          <span>Queue control</span>
+          <select id="queue-mode">
+            <option value="manual">Manual — promote from dashboard</option>
+            <option value="auto">Automatic — replace a closed window</option>
+          </select>
         </label>
 
         <label>
-          <span>Test environments</span>
-          <small>One per session: width×height | locale | timezone</small>
+          <span>Fixed profile personas</span>
+          <small>One per profile: width×height | locale | timezone. Generated from the country assignment.</small>
           <textarea id="environments" rows="4" spellcheck="false" required>1366x768 | en-US | America/New_York
 1440x900 | en-GB | Europe/London
 1536x864 | en-SG | Asia/Singapore</textarea>
           <button id="generate-environments" class="text-button" type="button">
-            Generate rows for session count
+            Generate country-matched personas
           </button>
         </label>
 
@@ -58,33 +65,33 @@
           <legend>Surfshark VPN per profile</legend>
 
           <label class="authorization">
-            <input id="vpn-enabled" type="checkbox" />
+            <input id="vpn-enabled" type="checkbox" checked />
             <span>
               <strong>Assign one VPN country per Chrome profile</strong><br />
-              Each profile loads the Surfshark extension, signs in, and connects to
-              a country no other running profile holds.
+              Each numbered persistent profile keeps one Surfshark country,
+              locale, timezone, viewport, cookies, and login.
             </span>
           </label>
 
           <div id="vpn-details" class="stack" hidden>
             <label>
-              <span>Unpacked Surfshark extension folder</span>
+              <span>Unpacked Surfshark folder (optional/advanced)</span>
               <small>
-                Absolute path to the directory that contains the extension's
-                manifest.json.
+                Leave blank to install normally from the Chrome Web Store in
+                each persistent profile during Prepare profiles.
               </small>
               <input
                 id="vpn-extension-path"
                 type="text"
                 spellcheck="false"
                 autocomplete="off"
-                placeholder="C:\surfshark-extension"
+                placeholder="Leave blank for Chrome Web Store setup"
               />
             </label>
 
             <div class="pair">
               <label>
-                <span>Surfshark email</span>
+                <span>Surfshark email (optional)</span>
                 <input
                   id="vpn-username"
                   type="email"
@@ -94,8 +101,8 @@
                 />
               </label>
               <label>
-                <span>Password</span>
-                <small>Not saved.</small>
+                <span>Password (optional)</span>
+                <small>Leave both blank to use the saved profile login. Not saved.</small>
                 <input
                   id="vpn-password"
                   type="password"
@@ -111,42 +118,28 @@
                 <span id="country-counter" class="counter">0 selected</span>
               </div>
               <small id="country-hint">
-                The pool must cover every simultaneously open profile. A country
-                is released when its Chrome window closes and reused by the next
-                queued session.
+                Select one country per persistent profile. Profile 1 gets the
+                first selected country, profile 2 the next, and so on.
               </small>
               <div id="country-grid" class="chip-grid"></div>
               <div class="picker-actions">
                 <button id="auto-pick" class="text-button" type="button">
-                  Auto-pick the minimum unique set
+                  Auto-pick one country per profile
                 </button>
                 <button id="clear-countries" class="text-button" type="button">
                   Clear
                 </button>
               </div>
+              <ol id="persona-preview" class="persona-preview"></ol>
             </div>
           </div>
         </fieldset>
-
-        <label id="proxy-field">
-          <span>IPRoyal proxies</span>
-          <small>One unique sticky proxy per session. Credentials are not saved.</small>
-          <textarea
-            id="proxies"
-            rows="5"
-            spellcheck="false"
-            autocomplete="off"
-            placeholder="geo.iproyal.com:12321:username:password_session-TestA1&#10;geo.iproyal.com:12321:username:password_session-TestB2"
-            required
-          ></textarea>
-        </label>
 
         <label class="authorization dry-run">
           <input id="direct-mode" type="checkbox" />
           <span>
             <strong>Direct-connection dry run</strong><br />
-            Test launching and isolation without IPRoyal. Required by VPN mode,
-            which routes through the Surfshark extension instead.
+            Turn off Surfshark to test launching without VPN routing.
           </span>
         </label>
 
@@ -193,9 +186,14 @@
         </label>
 
         <div class="actions">
-          <button class="primary" type="submit">Launch sessions</button>
+          <button id="launch-sessions" class="primary" type="submit">Launch sessions</button>
+          <button id="prepare-profiles" class="secondary" type="submit">Prepare profiles</button>
           <button id="stop-all" class="secondary" type="button">Stop all</button>
         </div>
+        <small>
+          Prepare opens blank persistent Chrome windows and leaves them untouched.
+          Install Surfshark, sign in, and connect the dashboard-assigned country manually.
+        </small>
       </form>
 
       <section id="status-card" class="status idle" aria-live="polite">
